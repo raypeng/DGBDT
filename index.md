@@ -18,9 +18,11 @@ We are going to implement an optimized distributed implementation of training gr
 
 Decision trees are a common model used in machine learning and data mining to approximate regression or classification functions. They take an input with a set of features and predict the corresponding label or value by using the nodes of the tree to split on the features. For example, below is an example of a decision tree used to assign a prediction score to whether or not a person likes computer games.
 
-```
+<br>
+
 ![Image from XGBOOST](https://raw.githubusercontent.com/dmlc/web-data/master/xgboost/model/cart.png)
-```
+
+<br>
 
 Ensemble learning is a machine learning technique to produce a prediction model from a collection of weak learners. The idea is that as long as the weak learner can do better than random guessing on average, then an ensemble of weak learners will have higher predictive performance than any individual weak learner. Gradient boosting achieves this by iteratively adding weak learners into the ensemble. On each iteration, after constructing a weak learner and adding it to the ensemble, the boosting algorithm will increase the weight of training data that the current model incorrectly predicts so that the next iteration will to try to “nudge” the constructed weak learner to address the current model’s weakness. Gradient boosting sets this up via an optimization problem where it uses gradient descent to minimize some loss function that captures the current ensemble’s performance when constructing new weak learners. 
 
@@ -74,16 +76,21 @@ We choose C++/CUDA on Linux mainly because we are most familiar with the platfor
 ## Schedule
 
 April 10 - April 16  	
+
 Research and brainstorm potential parallel algorithms, setup codebase, start working on distributed sequential version as a reference baseline.
 
 April 17 - April 23
+
 Complete distributed sequential version, measure accuracy and performance, start implementing parallel GPU version.
 
 April 24 - April 30
+
 Work on GPU version, measure accuracy and performance, optimize as necessary.
 
 May 1 - May 7
+
 If finished with GPU version, start implementation of CPU+GPU hybrid algorithm. Start performing measurements needed to analyze speedup and training accuracy.
 
 May 8 - May 12
+
 Wrap up, perform all measurements needed to analyze speedup and training accuracy, prepare presentation.

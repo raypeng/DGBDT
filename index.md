@@ -2,62 +2,82 @@
 layout: default
 ---
 
-[Solo](http://chibicode.github.io/solo) is a Jekyll theme that supports **single-page websites** only, but supports them well. Yes, it's responsive.
+# Distributed Gradient Boosted Decision Tree on GPU
 
-<iframe src="https://ghbtns.com/github-btn.html?user=chibicode&amp;repo=solo&amp;type=watch&amp;count=true&amp;size=large"
-  allowtransparency="true" frameborder="0" scrolling="0" width="170" height="30"></iframe><br/>
+Alex Xiao (axiao@andrew.cmu.edu), Rui Peng (ruip@andrew.cmu.edu)
 
-Looking for a more standard Jekyll theme? Try out [Shiori](http://github.com/ellekasai/shiori) theme, which has Bootstrap integration.
+## Summary
 
-## Solo is useful if...
+We are going to implement an optimized distributed implementation of training gradient boosted  decision trees. We plan to use OpenMPI for communication between nodes, and CUDA to parallelize each individual node’s training on GPU. If time allows, we also will attempt to implement a hybrid implementation of parallel decision tree learning that makes use of both CPUs and GPUs.
 
-* You want to create an "about me" page from a single markdown file and host it under a custom domain name.
-* You want to create a single-page website that's mostly text, like [Know Your Company](https://knowyourcompany.com/).
-* You want to share a single markdown file and tried GitHub Gist ([example](https://gist.github.com/dypsilon/5819504)), but would like something nicer-looking.
-* You want something like GitHub's [automatic page generator](http://pages.github.com/) for a non-code repository.
 
-This page itself is built with Solo. It's generated from [this markdown file](https://github.com/chibicode/solo/blob/gh-pages/_includes/index.md).
 
-## Usage
+## Background
 
-First, [install Jekyll](http://jekyllrb.com/docs/installation/). Then download Solo from its [GitHub Repository](https://github.com/chibicode/solo). Start Jekyll and you should see this page up and running.
+Decision trees are a common model used in machine learning and data mining to approximate regression or classification functions. They take an input with a set of features and predict the corresponding label or value by using the nodes of the tree to split on the features. For example, below is an example of a decision tree used to assign a prediction score to whether or not a person likes computer games.
 
-**The main file you'll be editing is `index.md`**. This becomes the content for the page.
+Ensemble learning is a machine learning technique to produce a prediction model from a collection of weak learners. The idea is that as long as the weak learner can do better than random guessing on average, then an ensemble of weak learners will have higher predictive performance than any individual weak learner. Gradient boosting achieves this by iteratively adding weak learners into the ensemble. On each iteration, after constructing a weak learner and adding it to the ensemble, the boosting algorithm will increase the weight of training data that the current model incorrectly predicts so that the next iteration will to try to “nudge” the constructed weak learner to address the current model’s weakness. Gradient boosting sets this up via an optimization problem where it uses gradient descent to minimize some loss function that captures the current ensemble’s performance when constructing new weak learners. 
 
-### Other Files
+Although gradient boosting does not have opportunities for parallelism, being an inherently sequential process, parallelization opportunities exist in training an individual decision tree. Specifically, the main computation required when training a decision tree is to determine which feature the next node should split on. There are different algorithms for doing this, but this often requires comparing some kind of objective function across all the features, which should have good opportunities for parallelism since multiple threads can search for the best feature to split on simultaneously. Our goal in this project will be to construct an algorithm that performs this efficiently across different nodes in a cluster with GPUs to accelerate the training process. If possible, we would also like to run our algorithm efficiently on hybrid architectures and make use of both CPUs and GPUs.
 
-* Edit `_config.yml` to change the site's title and description.
-* Edit `_includes/head.html` to add custom code to `<head>`.
-* Edit `_includes/scripts.html` to add custom code before `</body>`.
-* Edit `CNAME` to host on a custom domain.
-* Edit `README.md` before pushing your code.
 
-### Don't use `<h1>` tags
 
-Wthin `index.md`, do not use `<h1>` tags - `<h1>` is reserved for the site title.
+## The Challenge
 
-### Supported Tags
+We foresee two main challenges with distributed decision tree training.
 
-Solo supports lists, `<hr>`s, `<table>`s,
+* Parallelizing the training algorithm across nodes in a cluster will likely require significant communication between machines as the decision on which feature to split on requires global information, yet each machine only has a local view of the data.Addresses this problem might require some kind of efficient encoding scheme or an algorithm that tries to maximize locality in each node.
+* Most frameworks for decision tree learning support parallelism across CPU’s as their primary parallelism method. Only recently have these frameworks started to develop GPU implementations of decision tree training. The reasoning for this is that the algorithms they use do not translate well to GPU. To quote the creator of [XGBoost](https://github.com/dmlc/xgboost), a widely used decision tree learning framework: “The execution pattern of decision tree training relies heavily on conditional branches and thus has high ratio of divergent execution, which makes the algorithm have less benefit from SPMD architecture”.
 
-> blockquotes, and...
+We plan to address these 2 challenges by utilizing techniques we have learned in 15-418 as well as utilizing ideas in current literature for parallel decision tree learning.
 
-~~~html
-<pre>code blocks with syntax highlighting.</pre>
-~~~
 
-### Keep Solo up to date
 
-Instead of downloading, you can [fork Solo](https://github.com/chibicode/solo/fork) and use the "upstream" strategy described on [this page](https://help.github.com/articles/fork-a-repo) to keep Solo up to date.
+## Resources
 
-## Author
+We plan to develop and test our code on latedays cluster because we need a good distributed environment that has GPUs.
 
-Shu Uesugi ([Twitter](http://twitter.com/chibicode)/[GitHub](http://github.com/chibicode)/[G+](https://plus.google.com/110325199858284431541?rel=author)).
+We will start our implementation from scratch to have the fullest flexibility while we explore the problem. Should we ultimately decide to develop a CPU-GPU hybrid execution heterogeneous version, we might incorporate the [StarPU](http://starpu.gforge.inria.fr/) task programming library in our code.
 
-![Shu Uesugi](https://www.gravatar.com/avatar/b868d84bbe2ed30ec45c9253e1c1cefe.jpg?s=200)
 
-### License
 
-[MIT License](http://chibicode.mit-license.org/)
+## Goals and Deliverables
 
-<a href="https://github.com/chibicode/solo" class="github-corner"><svg width="80" height="80" viewBox="0 0 250 250" style="fill:#151513; color:#fff; position: absolute; top: 0; border: 0; right: 0;"><path d="M0,0 L115,115 L130,115 L142,142 L250,250 L250,0 Z"></path><path d="M128.3,109.0 C113.8,99.7 119.0,89.6 119.0,89.6 C122.0,82.7 120.5,78.6 120.5,78.6 C119.2,72.0 123.4,76.3 123.4,76.3 C127.3,80.9 125.5,87.3 125.5,87.3 C122.9,97.6 130.6,101.9 134.4,103.2" fill="currentColor" style="transform-origin: 130px 106px;" class="octo-arm"></path><path d="M115.0,115.0 C114.9,115.1 118.7,116.5 119.8,115.4 L133.7,101.6 C136.9,99.2 139.9,98.4 142.2,98.6 C133.8,88.0 127.5,74.4 143.8,58.0 C148.5,53.4 154.0,51.2 159.7,51.0 C160.3,49.4 163.2,43.6 171.4,40.1 C171.4,40.1 176.1,42.5 178.8,56.2 C183.1,58.6 187.2,61.8 190.9,65.4 C194.5,69.0 197.7,73.2 200.1,77.6 C213.8,80.2 216.3,84.9 216.3,84.9 C212.7,93.1 206.9,96.0 205.4,96.6 C205.1,102.4 203.0,107.8 198.3,112.5 C181.9,128.9 168.3,122.5 157.7,114.1 C157.9,116.9 156.7,120.9 152.7,124.9 L141.0,136.5 C139.8,137.7 141.6,141.9 141.8,141.8 Z" fill="currentColor" class="octo-body"></path></svg></a><style>.github-corner:hover .octo-arm{animation:octocat-wave 560ms ease-in-out}@keyframes octocat-wave{0%,100%{transform:rotate(0)}20%,60%{transform:rotate(-25deg)}40%,80%{transform:rotate(10deg)}}@media (max-width:500px){.github-corner:hover .octo-arm{animation:none}.github-corner .octo-arm{animation:octocat-wave 560ms ease-in-out}}</style>
+Baseline: a sequential CPU implementation with naive communication scheme of the algorithm on distributed setting.
+
+We will measure the performance of various implementations as the speed up versus the baseline and report the speedup under different settings.
+
+#### Plan to achieve: 
+
+* Significant speedup of parallel GPU implementation and efficient communication scheme over baseline version
+
+#### Hope to achieve:
+
+* Further speedup versus baseline version with an algorithm leveraging CPU+GPU hybrid execution architecture
+
+
+
+## Platform
+
+C++/CUDA, Linux.
+
+We choose C++/CUDA on Linux mainly because we are most familiar with the platform and it should be the best playground to make use of MPI and CUDA easily. Latedays also has both CPUs and GPUs, allowing us to attempt algorithms that run heterogenous architectures.
+
+
+
+## Schedule
+
+April 10 - April 16  	
+Research and brainstorm potential parallel algorithms, setup codebase, start working on distributed sequential version as a reference baseline.
+
+April 17 - April 23
+Complete distributed sequential version, measure accuracy and performance, start implementing parallel GPU version.
+
+April 24 - April 30
+Work on GPU version, measure accuracy and performance, optimize as necessary.
+
+May 1 - May 7
+If finished with GPU version, start implementation of CPU+GPU hybrid algorithm. Start performing measurements needed to analyze speedup and training accuracy.
+
+May 8 - May 12
+Wrap up, perform all measurements needed to analyze speedup and training accuracy, prepare presentation.

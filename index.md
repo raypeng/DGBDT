@@ -42,7 +42,7 @@ We foresee four main challenges with distributed decision tree training.
 * Parallelizing across nodes in a cluster will likely require significant communication between machines as the decision on which feature to split on requires global information, yet each machine only has a local view of the data. Addressing this problem might require some kind of efficient encoding scheme or an algorithm that tries to maximize locality in each node.
 * Most frameworks for decision tree learning support parallelism across CPU’s as their primary parallelism method. Only recently have these frameworks started to develop GPU implementations of decision tree training. The reasoning for this is that the algorithms they use do not translate well to GPU. To quote the creator of [XGBoost](https://github.com/dmlc/xgboost), a widely used decision tree learning framework: “The execution pattern of decision tree training relies heavily on conditional branches and thus has high ratio of divergent execution, which makes the algorithm have less benefit from SPMD architecture”.
 
-We plan to address these 2 challenges by utilizing techniques we have learned in 15-418 as well as utilizing ideas in current literature for parallel decision tree learning.
+We plan to address these 4 challenges by utilizing techniques we have learned in 15-418 as well as utilizing ideas in current literature for parallel decision tree learning.
 
 
 

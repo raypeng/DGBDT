@@ -24,17 +24,22 @@ Decision trees are a common model used in machine learning and data mining to ap
 
 <br>
 
-Ensemble learning is a machine learning technique to produce a prediction model from a collection of weak learners. The idea is that as long as the weak learner can do better than random guessing on average, then an ensemble of weak learners will have higher predictive performance than any individual weak learner. Gradient boosting achieves this by iteratively adding weak learners into the ensemble. On each iteration, after constructing a weak learner and adding it to the ensemble, the boosting algorithm will increase the weight of training data that the current model incorrectly predicts so that the next iteration will to try to “nudge” the constructed weak learner to address the current model’s weakness. Gradient boosting sets this up via an optimization problem where it uses gradient descent to minimize some loss function that captures the current ensemble’s performance when constructing new weak learners. 
+Ensemble learning is a machine learning technique to produce a prediction model from a collection of weak learners. The idea is that as long as the weak learner can do better than random guessing on average, then an ensemble of weak learners will have higher predictive performance than any individual weak learner. Gradient boosting achieves this by iteratively adding weak learners into the ensemble. On each iteration, after constructing a weak learner and adding it to the ensemble, the boosting algorithm will increase the weight of training data that the current model incorrectly predicts so that the next iteration will to try to “nudge” the constructed weak learner to address the current model’s weakness. Gradient boosting sets this up via an optimization problem where it uses gradient descent to minimize some loss function that captures the current ensemble’s performance when constructing new weak learners.
 
-Although gradient boosting does not have opportunities for parallelism, being an inherently sequential process, parallelization opportunities exist in training an individual decision tree. Specifically, the main computation required when training a decision tree is to determine which feature the next node should split on. There are different algorithms for doing this, but this often requires comparing some kind of objective function across all the features, which should have good opportunities for parallelism since multiple threads can search for the best feature to split on simultaneously. Our goal in this project will be to construct an algorithm that performs this efficiently across different nodes in a cluster with GPUs to accelerate the training process. If possible, we would also like to run our algorithm efficiently on hybrid architectures and make use of both CPUs and GPUs.
+Although gradient boosting does not have opportunities for parallelism, being an inherently sequential process, parallelization opportunities exist in training an individual decision tree. Specifically, the main computation required when training a decision tree is to determine which feature the next node should split on. There are different algorithms for doing this, but this often requires comparing some kind of objective function across all the features, which should have good opportunities for parallelism since multiple threads can search for the best feature to split on simultaneously. Other potential areas of parallelism include processing different nodes in the tree or separate subsets of the data simultaneously. Our goal in this project will be to construct an algorithm that takes advantage of these axes of parllelism efficiently across different nodes in a cluster with GPUs to accelerate the training process. If possible, we would also like to run our algorithm efficiently on hybrid architectures and make use of both CPUs and GPUs.
 
 
 
 ## The Challenge
 
-We foresee two main challenges with distributed decision tree training.
+We foresee four main challenges with distributed decision tree training.
 
-* Parallelizing the training algorithm across nodes in a cluster will likely require significant communication between machines as the decision on which feature to split on requires global information, yet each machine only has a local view of the data. Addressing this problem might require some kind of efficient encoding scheme or an algorithm that tries to maximize locality in each node.
+
+* The shape of the decision tree is irregular and determined at runtime, making it
+  difficult to statically partition the workload.
+* The workload at each node of the decision tree can vary signficantly, causing
+  further workload imbalance issues.
+* Parallelizing across nodes in a cluster will likely require significant communication between machines as the decision on which feature to split on requires global information, yet each machine only has a local view of the data. Addressing this problem might require some kind of efficient encoding scheme or an algorithm that tries to maximize locality in each node.
 * Most frameworks for decision tree learning support parallelism across CPU’s as their primary parallelism method. Only recently have these frameworks started to develop GPU implementations of decision tree training. The reasoning for this is that the algorithms they use do not translate well to GPU. To quote the creator of [XGBoost](https://github.com/dmlc/xgboost), a widely used decision tree learning framework: “The execution pattern of decision tree training relies heavily on conditional branches and thus has high ratio of divergent execution, which makes the algorithm have less benefit from SPMD architecture”.
 
 We plan to address these 2 challenges by utilizing techniques we have learned in 15-418 as well as utilizing ideas in current literature for parallel decision tree learning.
@@ -55,7 +60,7 @@ Baseline: a sequential CPU implementation with naive communication scheme of the
 
 We will measure the performance of various implementations as the speed up versus the baseline and report the speedup under different settings.
 
-#### Plan to achieve: 
+#### Plan to achieve:
 
 * Significant speedup of parallel GPU implementation and efficient communication scheme over baseline version
 
@@ -75,7 +80,7 @@ We choose C++/CUDA on Linux mainly because we are most familiar with the platfor
 
 ## Schedule
 
-April 10 - April 16  	
+April 10 - April 16
 
 Research and brainstorm potential parallel algorithms, setup codebase, start working on distributed sequential version as a reference baseline.
 

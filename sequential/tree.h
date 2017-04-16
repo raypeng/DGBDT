@@ -33,10 +33,15 @@ public:
             right_child(NULL),
             split_info({ -1, -999}),
             majority_label(-1) {
+        cout << "node created with id " << node_id << endl;
     }
 
     void set_majority_label(int label) {
         majority_label = label;
+    }
+
+    bool is_leaf() {
+        return left_child == NULL && right_child == NULL;
     }
 
     // for debugging

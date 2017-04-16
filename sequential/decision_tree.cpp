@@ -154,11 +154,14 @@ void split_data(vector<bool>& indices, const Dataset& d, int feature_id, Feature
 
 int get_majority_label(const Dataset& d, vector<bool>& indices) {
     vector<int> votes(d.num_classes);
+    int num_active = 0;
     for (int i = 0; i < d.num_samples; i++) {
         if (indices[i]) {
+            num_active++;
             votes[d.y[i]]++;
         }
     }
+    cout << "num_active " << num_active << endl;
     return max_element(votes.begin(), votes.end()) - votes.begin();
 }
 
@@ -225,7 +228,7 @@ int DecisionTree::test_single_sample(const Dataset& d, int sample_id) {
         print(curr->node_id, "test_single_sample node_id");
         print(curr_feature, "test_single_sample curr_feature");
         print(curr_thres, "test_single_sample curr_thres");
-        if (curr_feature == DecisionTree::PerfectSplit) {
+        if (curr->is_leaf()) {
             return curr->majority_label;
         }
         if (d.x[curr_feature][sample_id] < curr_thres) {

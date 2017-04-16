@@ -1,6 +1,7 @@
 # for this repo
 .DS_Store
 _site/
+big/
 .*/
 
 # Byte-compiled / optimized / DLL files

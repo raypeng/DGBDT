@@ -21,12 +21,15 @@
 #include <tuple>
 #include <type_traits>
 
+// #define debug
 
 namespace std {
 
     template <class T>
     void print(T val, string prefix="") {
+#ifdef debug
       cout << prefix << " " << val << endl;
+#endif
     }
 
     template <class U, class V>

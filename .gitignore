@@ -1,4 +1,5 @@
 # for this repo
+.DS_Store
 _site/
 .*/
 

@@ -9,9 +9,9 @@
 using namespace std;
 
 int main() {
-    string file_path = "../../dataset/iris.data.tab.txt";
+    string file_path = "../dataset/iris.data.tab.txt";
     Dataset d = parse_tsv(file_path, 4, 3);
-//    string file_path = "../../dataset/wiki.txt";
+//    string file_path = "../dataset/wiki.txt";
 //    Dataset d = parse_tsv(file_path, 3, 2);
 
     print(d.num_samples, "d.num_samples:");

@@ -5,6 +5,7 @@
 #include <list>
 #include <cmath>
 #include <limits>
+#include <algorithm>
 
 #include "decision_tree.h"
 #include "mypprint.hpp"

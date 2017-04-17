@@ -45,6 +45,7 @@ public:
 float find_info_gain_by_split_on_feature(const Dataset& d, vector<bool> indices, int feature_id, float& thres) {
     // entropy before split does not affect comparing info gain values across different features to split
     // so only pick smallest total entropy after split
+    // equivalent to taking entropy before split as zero
     print(feature_id, "find_split_feature feature_id");
     vector<pair<float, int>> ft_pairs; // feature_target_pairs
     vector<int> num_yes_before(d.num_classes, 0);
@@ -187,8 +188,9 @@ DecisionTree::DecisionTree(int max_num_leaves_) {
 }
 
 void DecisionTree::train(const Dataset &d) {
+    int curr_node_id = 0;
     vector<bool> all_indices(d.num_samples, true);
-    root = new TreeNode(num_leaves++, all_indices);
+    root = new TreeNode(curr_node_id++, all_indices);
     root->set_majority_label(get_majority_label(d, all_indices));
     list<TreeNode*> work_queue;
     work_queue.push_back(root);
@@ -205,6 +207,7 @@ void DecisionTree::train(const Dataset &d) {
         print(curr->node_id, "working on splitting node id");
         curr->split_info = find_split(d, curr_indices);
         if (curr->split_info.feature_id < 0) { // no need to split
+            num_leaves++;
             if (curr->split_info.feature_id == DecisionTree::NoProperSplit) {
                 cout << "no proper way to split data for node " << curr->node_id << endl;
             } else {
@@ -225,8 +228,8 @@ void DecisionTree::train(const Dataset &d) {
         // optional: remove indices in curr since it's no longer useful
         curr->sample_indices.clear();
         // create two child nodes and add to work queue
-        curr->left_child = new TreeNode(num_leaves++, left_indices);
-        curr->right_child = new TreeNode(num_leaves++, right_indices);
+        curr->left_child = new TreeNode(curr_node_id++, left_indices);
+        curr->right_child = new TreeNode(curr_node_id++, right_indices);
         curr->left_child->set_majority_label(get_majority_label(d, left_indices));
         curr->right_child->set_majority_label(get_majority_label(d, right_indices));
         print(curr->left_child->node_id, "new left TreeNode added to queue, node_id:");

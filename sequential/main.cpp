@@ -23,7 +23,7 @@ int main() {
     // cout << "d.y " << d.y << endl;
     // cout << "d.x[0]" << d.x[0] << endl;
 
-    DecisionTree dt = DecisionTree(64);
+    DecisionTree dt = DecisionTree(32);
     cout << "training started" << endl;
     dt.train(d);
     cout << "training done" << endl;

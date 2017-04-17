@@ -54,12 +54,12 @@ float find_info_gain_by_split_on_feature(const Dataset& d, vector<bool> indices,
             num_yes_before[d.y[i]]++;
         }
     }
-    print(num_yes_before, "find_split_feature num_yes_before");
+    // print(num_yes_before, "find_split_feature num_yes_before");
     int N = ft_pairs.size();
     sort(ft_pairs.begin(), ft_pairs.end(), [](const pair<float, int>& a, const pair<float, int>& b) {
         return a.first < b.first;
     });
-    print(ft_pairs, "find_split_feature ft_pairs");
+    // print(ft_pairs, "find_split_feature ft_pairs");
     // get statistics of how many samples are from each class that says yes to feature < thres
     vector<vector<int>> num_yes(d.num_classes, vector<int>(N));
     for (int c = 0; c < d.num_classes; c++) {
@@ -73,9 +73,18 @@ float find_info_gain_by_split_on_feature(const Dataset& d, vector<bool> indices,
             count += (ft_pairs[i].second == c);
         }
     }
-    print(num_yes, "find_split_feature num_yes");
+    // print(num_yes, "find_split_feature num_yes");
     vector<float> entropies(N, numeric_limits<float>::max());
-    for (int split_index = 1; split_index < N; split_index++) {
+    int first_nontrivial_index = 1;
+    while (first_nontrivial_index < N &&
+           ft_pairs[first_nontrivial_index].first == ft_pairs[first_nontrivial_index - 1].first) {
+        first_nontrivial_index++;
+    }
+    print(first_nontrivial_index, "first non_trivial ");
+    if (ft_pairs.front().first == ft_pairs.back().first) { // all values same, no proper way to split
+        return numeric_limits<float>::max();
+    }
+    for (int split_index = first_nontrivial_index; split_index < N; split_index++) {
         int total_samples_left = 0;
         for (int c = 0; c < d.num_classes; c++) {
             total_samples_left += num_yes[c][split_index];
@@ -102,7 +111,7 @@ float find_info_gain_by_split_on_feature(const Dataset& d, vector<bool> indices,
             entropies[split_index] += (1. * total_samples_right / N) * right_entropy;
         }
     }
-    print(entropies, "find_split_feature entropies");
+    // print(entropies, "find_split_feature entropies");
     int best_split_index = min_element(entropies.begin(), entropies.end()) - entropies.begin();
     thres = ft_pairs[best_split_index].first;
     return entropies[best_split_index];
@@ -111,9 +120,10 @@ float find_info_gain_by_split_on_feature(const Dataset& d, vector<bool> indices,
 SplitInfo find_split(const Dataset& d, vector<bool> indices) {
     if (none_of(indices.begin(), indices.end(), [](bool x) {
         return x;
-    })) { // indices all false - no data to split
+    })) {
+        // indices all false - no data to split
         // should not happen
-        cerr << "find_split ending up no data";
+        cerr << "find_split ending up no data, still deciding what to do with this case";
         abort();
         return {DecisionTree::NoData, -1};
     }
@@ -137,8 +147,13 @@ SplitInfo find_split(const Dataset& d, vector<bool> indices) {
         info_gains[f] = find_info_gain_by_split_on_feature(d, indices, f, thres);
         thresholds[f] = thres;
     }
-    print(info_gains, "find_split info_gains");
+    // print(info_gains, "find_split info_gains");
     int best_feature = min_element(info_gains.begin(), info_gains.end()) - info_gains.begin();
+    if (info_gains[best_feature] == numeric_limits<float>::max()) {
+        // best split is still not proper split, no more splitting possible
+        // only happens when sample feature value all same for all features
+        return {DecisionTree::NoProperSplit, -1};
+    }
     return {best_feature, thresholds[best_feature]};
 }
 
@@ -161,7 +176,7 @@ int get_majority_label(const Dataset& d, vector<bool>& indices) {
             votes[d.y[i]]++;
         }
     }
-    cout << "num_active " << num_active << endl;
+    print(num_active, "num_active ");
     return max_element(votes.begin(), votes.end()) - votes.begin();
 }
 
@@ -187,9 +202,14 @@ void DecisionTree::train(const Dataset &d) {
         work_queue.pop_front();
         // find split according to the data in curr
         vector<bool>& curr_indices = curr->sample_indices;
+        print(curr->node_id, "working on splitting node id");
         curr->split_info = find_split(d, curr_indices);
-        if (curr->split_info.feature_id == DecisionTree::PerfectSplit) { // no need to split
-            print("perfect split");
+        if (curr->split_info.feature_id < 0) { // no need to split
+            if (curr->split_info.feature_id == DecisionTree::NoProperSplit) {
+                cout << "no proper way to split data for node " << curr->node_id << endl;
+            } else {
+                cout << "perfect split already for node " << curr->node_id << endl;
+            }
             continue;
         }
         print(curr->split_info.feature_id, "split on feature:");
@@ -210,11 +230,11 @@ void DecisionTree::train(const Dataset &d) {
         curr->left_child->set_majority_label(get_majority_label(d, left_indices));
         curr->right_child->set_majority_label(get_majority_label(d, right_indices));
         print(curr->left_child->node_id, "new left TreeNode added to queue, node_id:");
-        print(curr->left_child->sample_indices, "with indices:");
-        print(curr->left_child->majority_label, "with majority vote:");
+        // print(curr->left_child->sample_indices, "with indices:");
+        // print(curr->left_child->majority_label, "with majority vote:");
         print(curr->right_child->node_id, "new right TreeNode added to queue, node_id:");
-        print(curr->right_child->sample_indices, "with indices: ");
-        print(curr->right_child->majority_label, "with majority vote:");
+        // print(curr->right_child->sample_indices, "with indices: ");
+        // print(curr->right_child->majority_label, "with majority vote:");
         work_queue.push_back(curr->left_child);
         work_queue.push_back(curr->right_child);
     }

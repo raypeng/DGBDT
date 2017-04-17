@@ -14,7 +14,7 @@ private:
     int max_num_leaves;
     TreeNode* root;
 public:
-    enum NodeStatus { NoData = -3, PerfectSplit = -2 };
+    enum NodeStatus { NoProperSplit = -4, NoData = -3, PerfectSplit = -2 };
     // potentially more hyperparams
     DecisionTree(int max_num_leaves_);
 

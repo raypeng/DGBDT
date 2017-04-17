@@ -10,14 +10,13 @@
 using namespace std;
 
 
-Dataset parse_tsv(string file_path, int num_features, int num_classes) {
+Dataset DatasetParser::parse_tsv(string file_path, int num_features, int num_classes) {
     cout << "parsing started\n";
     fstream infile(file_path);
     Dataset d;
     d.num_features = num_features;
     d.num_classes = num_classes;
     d.x.resize(d.num_features);
-    map<string, int> label_map;
     string label, curr;
     int num_labels = 0;
     while (!infile.eof()) {
@@ -35,4 +34,3 @@ Dataset parse_tsv(string file_path, int num_features, int num_classes) {
     cout << "parsing done\n";
     return d;
 }
-

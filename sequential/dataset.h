@@ -23,6 +23,11 @@ struct Dataset {
     vector<int> y;
 };
 
-Dataset parse_tsv(string file_path, int num_features, int num_classes);
+class DatasetParser {
+private:
+    map<string, int> label_map;
+public:
+    Dataset parse_tsv(string file_path, int num_features, int num_classes);
+};
 
 #endif //SEQUENTIAL_DATASET_H

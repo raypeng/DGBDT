@@ -1,0 +1,3 @@
+MSLTR	s4: train, s5: test, max_leave_nodes: 32
+ours:	    88s
+sklearn:    15s

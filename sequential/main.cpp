@@ -23,14 +23,14 @@ int main() {
     // cout << "d.y " << d.y << endl;
     // cout << "d.x[0]" << d.x[0] << endl;
 
-    DecisionTree dt = DecisionTree(255);
+    DecisionTree dt = DecisionTree(32);
     cout << "training started" << endl;
     dt.train(d);
     cout << "training done" << endl;
-    cout << "test on sample 0, predicted label:" << dt.test_single_sample(d, 0) << endl;
-    cout << "test on training set, accuracy:" << dt.test(d) << endl;
+    cout << "test on sample 0, predicted label: " << dt.test_single_sample(d, 0) << endl;
+    cout << "test on training set, accuracy: " << dt.test(d) << endl;
 
     Dataset t = dp.parse_tsv("../dataset/big/mslr10k.s5.tab.txt", 136, 5);
-    cout << "test on test set, accuracy:" << dt.test(t) << endl;
+    cout << "test on test set, accuracy: " << dt.test(t) << endl;
 
 }

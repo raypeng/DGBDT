@@ -76,6 +76,7 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, v
             count += (ft_pairs[i].second == c);
         }
     }
+
     // print(num_yes, "find_split_feature num_yes");
     int first_nontrivial_index = 1;
     while (first_nontrivial_index < N &&
@@ -134,26 +135,17 @@ SplitInfo DecisionTree::find_split(const Dataset& d, vector<bool> indices, TreeN
         // should not happen
         cerr << "find_split ending up no data, still deciding what to do with this case";
         abort();
-        return {DecisionTree::NoData, -1};
-    }
-    bool perfect_split = true;
-    int last_label = -1;
-    for (int i = 0; i < d.num_samples; i++) {
-        if (indices[i]) {
-            if (last_label == -1) { // not set yet
-                last_label = d.y[i];
-            } else if (last_label != d.y[i]) { // a different label than last, >= labels
-                perfect_split = false;
-                break;
-            }
-        }
-    }
-    if (perfect_split) { // all samples are from same label
-        return {DecisionTree::PerfectSplit, -1, -1, -1, -1};
+        return {MinSize, -1};
     }
     int best_feature = -1;
     float min_entropy = numeric_limits<float>::max();
     float best_left_entropy = -1, best_right_entropy = -1, best_split_thres = -1;
+
+    pair<bool, NodeStatus> stop_result = should_stop(d, indices, curr_node);
+    if (stop_result.first) {
+        return {stop_result.second, -1, -1, -1, -1};
+    }
+
     for (int f = 0; f < d.num_features; f++) {
         auto curr_split_info = find_new_entropy_by_split_on_feature(d, indices, f, curr_node);
         if (curr_split_info.min_entropy < min_entropy) {
@@ -167,7 +159,7 @@ SplitInfo DecisionTree::find_split(const Dataset& d, vector<bool> indices, TreeN
     // some extra stuff to check if the SplitInfo meets our requirement
     float info_gain = curr_node->get_entropy() - min_entropy;
     if (info_gain < INFO_GAIN_THRESHOLD) {
-        return {DecisionTree::NoGain, -1, -1, -1, -1};
+        return {NoGain, -1, -1, -1, -1};
     }
     return {best_feature, min_entropy, best_split_thres, best_left_entropy, best_right_entropy};
 }
@@ -180,6 +172,30 @@ void split_data(vector<bool>& indices, const Dataset& d, int feature_id, Feature
             indices[i] = f->compare(values[i]);
         }
     }
+}
+
+pair<bool, NodeStatus> DecisionTree::should_stop(const Dataset& d, vector<bool>& indices, TreeNode* curr) {
+    bool perfect_split = true;
+    int last_label = -1;
+    for (int i = 0; i < d.num_samples; i++) {
+        if (indices[i]) {
+            if (last_label == -1) { // not set yet
+                last_label = d.y[i];
+            } else if (last_label != d.y[i]) { // a different label than last, >= labels
+                perfect_split = false;
+                break;
+            }
+        }
+    }
+    if (perfect_split) { // all samples are from same label
+         return {true, PerfectSplit};
+    } else if (curr->get_depth() >= max_depth) {
+        return {true, MaxDepth};
+    } else if (curr->get_size() <= min_node_size) {
+        return {true, MinSize};
+    }
+
+    return {false, Ok};
 }
 
 int get_majority_label(const Dataset& d, vector<bool>& indices) {
@@ -195,9 +211,12 @@ int get_majority_label(const Dataset& d, vector<bool>& indices) {
     return max_element(votes.begin(), votes.end()) - votes.begin();
 }
 
-DecisionTree::DecisionTree(int max_num_leaves_) {
+DecisionTree::DecisionTree(int max_num_leaves_, int max_depth_,
+      int min_node_size_) {
     num_leaves = 0;
     max_num_leaves = max_num_leaves_;
+    max_depth = max_depth_;
+    min_node_size = min_node_size_;
     root = NULL;
 }
 
@@ -205,7 +224,7 @@ void DecisionTree::train(const Dataset &d) {
     int curr_node_id = 0;
     vector<bool> all_indices(d.num_samples, true);
     float dummy_large_entropy = 1e3; // hack! coz we always split when we start anyways
-    root = new TreeNode(curr_node_id++, all_indices, dummy_large_entropy);
+    root = new TreeNode(curr_node_id++, all_indices, 0, d.num_samples, dummy_large_entropy);
     root->set_majority_label(get_majority_label(d, all_indices));
     list<TreeNode*> work_queue;
     work_queue.push_back(root);
@@ -223,10 +242,18 @@ void DecisionTree::train(const Dataset &d) {
         curr->split_info = find_split(d, curr_indices, curr);
         if (curr->split_info.split_feature_id < 0) { // no need to split
             num_leaves++;
-            if (curr->split_info.split_feature_id == DecisionTree::NoProperSplit) {
-                cout << "no proper way to split data for node " << curr->node_id << endl;
-            } else {
-                cout << "perfect split already for node " << curr->node_id << endl;
+            switch (curr->split_info.split_feature_id) {
+                case PerfectSplit:
+                    cout << "perfect split already for node " << curr->node_id << endl;
+                    break;
+                case MaxDepth:
+                    cout << "node at max depth  " << curr->node_id << endl;
+                    break;
+                case MinSize:
+                    cout << "node at min size  " << curr->node_id << endl;
+                    break;
+                default:
+                    cout << "node became leaf for unkown reason " << curr->node_id << endl;
             }
             curr->set_majority_label(get_majority_label(d, curr->sample_indices));
             continue;
@@ -244,8 +271,9 @@ void DecisionTree::train(const Dataset &d) {
         // optional: remove indices in curr since it's no longer useful
         curr->sample_indices.clear();
         // create two child nodes and add to work queue
-        curr->left_child = new TreeNode(curr_node_id++, left_indices, curr->split_info.left_entropy);
-        curr->right_child = new TreeNode(curr_node_id++, right_indices, curr->split_info.right_entropy);
+        // TODO: make the size of the node actually real after partitioning is implemented
+        curr->left_child = new TreeNode(curr_node_id++, left_indices, curr->get_depth()+1, d.num_samples, curr->split_info.left_entropy);
+        curr->right_child = new TreeNode(curr_node_id++, right_indices, curr->get_depth()+1, d.num_samples, curr->split_info.right_entropy);
         print(curr->left_child->node_id, "new left TreeNode added to queue, node_id:");
         // print(curr->left_child->sample_indices, "with indices:");
         // print(curr->left_child->majority_label, "with majority vote:");

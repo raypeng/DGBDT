@@ -8,7 +8,7 @@
 #include "tree.h"
 #include "dataset.h"
 
-#define MAX_DEPTH 1000000
+#define MAX_DEPTH 100000
 
 class DecisionTree {
 private:

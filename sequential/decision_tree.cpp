@@ -247,13 +247,13 @@ void DecisionTree::train(const Dataset &d) {
                     cout << "perfect split already for node " << curr->node_id << endl;
                     break;
                 case MaxDepth:
-                    cout << "node at max depth  " << curr->node_id << endl;
+                    cout << "node at max depth with id " << curr->node_id << endl;
                     break;
                 case MinSize:
-                    cout << "node at min size  " << curr->node_id << endl;
+                    cout << "node at min size with id " << curr->node_id << endl;
                     break;
                 default:
-                    cout << "node became leaf for unkown reason " << curr->node_id << endl;
+                    cout << "node became leaf for unknown reason " << curr->node_id << endl;
             }
             curr->set_majority_label(get_majority_label(d, curr->sample_indices));
             continue;

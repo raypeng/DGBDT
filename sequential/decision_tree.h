@@ -8,15 +8,25 @@
 #include "tree.h"
 #include "dataset.h"
 
+#define MAX_DEPTH 1000000
+
 class DecisionTree {
 private:
     int num_leaves;
     int max_num_leaves;
+    int max_depth;
+    int min_node_size;
     TreeNode* root;
+
+    // Private helper methods.
+    SplitInfo find_split(const Dataset& d, vector<bool> indices,
+            TreeNode* curr);
+    pair<bool, NodeStatus> should_stop(const Dataset& d, vector<bool>&
+            indices, TreeNode* curr);
 public:
-    enum NodeStatus { NoProperSplit = -4, NoData = -3, PerfectSplit = -2 };
     // potentially more hyperparams
-    DecisionTree(int max_num_leaves_);
+    DecisionTree(int max_num_leaves_, int max_depth_ = MAX_DEPTH,
+        int min_node_size_ = 0);
 
     void train(const Dataset& d);
 

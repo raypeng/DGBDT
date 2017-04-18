@@ -11,9 +11,11 @@
 using namespace std;
 
 struct SplitInfo {
-    int feature_id;
+    int feature_id; // going to be NodeStatus if < 0
     float threshold;
 };
+
+enum NodeStatus { Splitted = 0, PerfectSplit = -1, MaxDepth = -2, MinSize = -3};
 
 class TreeNode {
     friend class DecisionTree;
@@ -24,15 +26,19 @@ private:
     TreeNode* left_child;
     TreeNode* right_child;
     int majority_label;
+    int depth;
+    int size;
 
 public:
-    TreeNode(int node_id_, vector<bool>& sample_indices_) :
+    TreeNode(int node_id_, vector<bool>& sample_indices_, int depth_, int size_) :
             node_id(node_id_),
             sample_indices(sample_indices_),
             left_child(NULL),
             right_child(NULL),
             split_info({ -1, -999}),
-            majority_label(-1) {
+            majority_label(-1),
+            depth(depth_),
+            size(size_) {
         cout << "node created with id " << node_id << endl;
     }
 
@@ -42,6 +48,14 @@ public:
 
     bool is_leaf() {
         return left_child == NULL && right_child == NULL;
+    }
+
+    int get_depth() {
+        return depth;
+    }
+
+    int get_size() {
+        return size;
     }
 
     // for debugging

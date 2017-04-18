@@ -74,6 +74,7 @@ float find_info_gain_by_split_on_feature(const Dataset& d, vector<bool> indices,
             count += (ft_pairs[i].second == c);
         }
     }
+
     // print(num_yes, "find_split_feature num_yes");
     vector<float> entropies(N, numeric_limits<float>::max());
     int first_nontrivial_index = 1;
@@ -85,7 +86,7 @@ float find_info_gain_by_split_on_feature(const Dataset& d, vector<bool> indices,
     if (ft_pairs.front().first == ft_pairs.back().first) { // all values same, no proper way to split
         return numeric_limits<float>::max();
     }
-    for (int split_index = first_nontrivial_index; split_index < N; split_index++) {
+    for (int split_index = 0; split_index < N; split_index++) {
         int total_samples_left = 0;
         for (int c = 0; c < d.num_classes; c++) {
             total_samples_left += num_yes[c][split_index];
@@ -118,7 +119,7 @@ float find_info_gain_by_split_on_feature(const Dataset& d, vector<bool> indices,
     return entropies[best_split_index];
 }
 
-SplitInfo find_split(const Dataset& d, vector<bool> indices) {
+SplitInfo DecisionTree::find_split(const Dataset& d, vector<bool> indices, TreeNode *curr) {
     if (none_of(indices.begin(), indices.end(), [](bool x) {
         return x;
     })) {
@@ -126,22 +127,14 @@ SplitInfo find_split(const Dataset& d, vector<bool> indices) {
         // should not happen
         cerr << "find_split ending up no data, still deciding what to do with this case";
         abort();
-        return {DecisionTree::NoData, -1};
+        return {MinSize, -1};
     }
-    bool perfect_split = true;
-    unordered_set<int> possible_labels;
-    for (int i = 0; i < d.num_samples; i++) {
-        if (indices[i]) {
-            possible_labels.insert(d.y[i]);
-            if (possible_labels.size() > 1) {
-                perfect_split = false;
-                break;
-            }
-        }
+
+    pair<bool, NodeStatus> stop_result = should_stop(d, indices, curr);
+    if (stop_result.first) {
+        return {stop_result.second, -1};
     }
-    if (perfect_split) { // all samples are from same label
-        return {DecisionTree::PerfectSplit, -1};
-    }
+
     vector<float> info_gains(d.num_features), thresholds(d.num_features);
     for (int f = 0; f < d.num_features; f++) {
         float thres;
@@ -153,7 +146,7 @@ SplitInfo find_split(const Dataset& d, vector<bool> indices) {
     if (info_gains[best_feature] == numeric_limits<float>::max()) {
         // best split is still not proper split, no more splitting possible
         // only happens when sample feature value all same for all features
-        return {DecisionTree::NoProperSplit, -1};
+        return {NoProperSplit, -1};
     }
     return {best_feature, thresholds[best_feature]};
 }
@@ -166,6 +159,32 @@ void split_data(vector<bool>& indices, const Dataset& d, int feature_id, Feature
             indices[i] = f->compare(values[i]);
         }
     }
+}
+
+pair<bool, NodeStatus> DecisionTree::should_stop(const Dataset& d, vector<bool>& indices, TreeNode* curr) {
+    bool perfect_split = true;
+    unordered_set<int> possible_labels;
+    for (int i = 0; i < d.num_samples; i++) {
+        if (indices[i]) {
+            possible_labels.insert(d.y[i]);
+            if (possible_labels.size() > 1) {
+                perfect_split = false;
+                break;
+            }
+        }
+    }
+
+   if (perfect_split) { // all samples are from same label
+        return {true, PerfectSplit};
+   } else if (curr->get_depth() >= max_depth) {
+       return {true, MaxDepth};
+   } else if (curr->get_size() <= min_node_size) {
+       return {true, MinSize};
+   }
+
+   // Haven't actualy "splitted" it yet, but we return it here just as a
+   // placeholder..
+   return {false, Splitted};
 }
 
 int get_majority_label(const Dataset& d, vector<bool>& indices) {
@@ -181,16 +200,19 @@ int get_majority_label(const Dataset& d, vector<bool>& indices) {
     return max_element(votes.begin(), votes.end()) - votes.begin();
 }
 
-DecisionTree::DecisionTree(int max_num_leaves_) {
+DecisionTree::DecisionTree(int max_num_leaves_, int max_depth_,
+      int min_node_size_) {
     num_leaves = 0;
     max_num_leaves = max_num_leaves_;
+    max_depth = max_depth_;
+    min_node_size = min_node_size_;
     root = NULL;
 }
 
 void DecisionTree::train(const Dataset &d) {
     int curr_node_id = 0;
     vector<bool> all_indices(d.num_samples, true);
-    root = new TreeNode(curr_node_id++, all_indices);
+    root = new TreeNode(curr_node_id++, all_indices, 0, d.num_samples);
     root->set_majority_label(get_majority_label(d, all_indices));
     list<TreeNode*> work_queue;
     work_queue.push_back(root);
@@ -205,16 +227,26 @@ void DecisionTree::train(const Dataset &d) {
         // find split according to the data in curr
         vector<bool>& curr_indices = curr->sample_indices;
         print(curr->node_id, "working on splitting node id");
-        curr->split_info = find_split(d, curr_indices);
+        curr->split_info = find_split(d, curr_indices, curr);
+
         if (curr->split_info.feature_id < 0) { // no need to split
             num_leaves++;
-            if (curr->split_info.feature_id == DecisionTree::NoProperSplit) {
-                cout << "no proper way to split data for node " << curr->node_id << endl;
-            } else {
-                cout << "perfect split already for node " << curr->node_id << endl;
+            switch (curr->split_info.feature_id) {
+                case PerfectSplit:
+                    cout << "perfect split already for node " << curr->node_id << endl;
+                    break;
+                case MaxDepth:
+                    cout << "node at max depth  " << curr->node_id << endl;
+                    break;
+                case MinSize:
+                    cout << "node at min size  " << curr->node_id << endl;
+                    break;
+                default:
+                    cout << "node became leaf for unkown reason " << curr->node_id << endl;
             }
             continue;
         }
+
         print(curr->split_info.feature_id, "split on feature:");
         print(curr->split_info.threshold, "split on threshold:");
         // split data into two halves
@@ -228,8 +260,12 @@ void DecisionTree::train(const Dataset &d) {
         // optional: remove indices in curr since it's no longer useful
         curr->sample_indices.clear();
         // create two child nodes and add to work queue
-        curr->left_child = new TreeNode(curr_node_id++, left_indices);
-        curr->right_child = new TreeNode(curr_node_id++, right_indices);
+
+        // TODO: make the size of the node actually real after partitioning is implemented
+        curr->left_child = new TreeNode(curr_node_id++, left_indices,
+                curr->get_depth()+1, d.num_samples);
+        curr->right_child = new TreeNode(curr_node_id++, right_indices,
+                curr->get_depth()+1, d.num_samples);
         curr->left_child->set_majority_label(get_majority_label(d, left_indices));
         curr->right_child->set_majority_label(get_majority_label(d, right_indices));
         print(curr->left_child->node_id, "new left TreeNode added to queue, node_id:");

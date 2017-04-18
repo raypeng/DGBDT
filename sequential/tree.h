@@ -11,8 +11,11 @@
 using namespace std;
 
 struct SplitInfo {
-    int feature_id;
-    float threshold;
+    int split_feature_id;
+    float min_entropy;
+    float split_threshold;
+    float left_entropy;
+    float right_entropy;
 };
 
 class TreeNode {
@@ -21,13 +24,15 @@ private:
     int node_id;
     SplitInfo split_info;
     vector<bool> sample_indices;
+    float entropy;
     TreeNode* left_child;
     TreeNode* right_child;
     int majority_label;
 
 public:
-    TreeNode(int node_id_, vector<bool>& sample_indices_) :
+    TreeNode(int node_id_, vector<bool>& sample_indices_, float entropy_) :
             node_id(node_id_),
+            entropy(entropy_),
             sample_indices(sample_indices_),
             left_child(NULL),
             right_child(NULL),
@@ -38,6 +43,14 @@ public:
 
     void set_majority_label(int label) {
         majority_label = label;
+    }
+
+    void set_entropy(float entropy_) {
+        entropy = entropy_;
+    }
+
+    float get_entropy() {
+        return entropy;
     }
 
     bool is_leaf() {

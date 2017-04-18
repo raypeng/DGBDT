@@ -10,6 +10,8 @@
 #include "decision_tree.h"
 #include "mypprint.hpp"
 
+#define INFO_GAIN_THRESHOLD 1e-3
+
 using namespace std;
 
 class FeatureComparator {
@@ -42,7 +44,7 @@ public:
     }
 };
 
-float find_info_gain_by_split_on_feature(const Dataset& d, vector<bool> indices, int feature_id, float& thres) {
+SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, vector<bool> indices, int feature_id, TreeNode* curr_node) {
     // entropy before split does not affect comparing info gain values across different features to split
     // so only pick smallest total entropy after split
     // equivalent to taking entropy before split as zero
@@ -75,16 +77,19 @@ float find_info_gain_by_split_on_feature(const Dataset& d, vector<bool> indices,
         }
     }
     // print(num_yes, "find_split_feature num_yes");
-    vector<float> entropies(N, numeric_limits<float>::max());
     int first_nontrivial_index = 1;
     while (first_nontrivial_index < N &&
            ft_pairs[first_nontrivial_index].first == ft_pairs[first_nontrivial_index - 1].first) {
         first_nontrivial_index++;
     }
     print(first_nontrivial_index, "first non_trivial ");
-    if (ft_pairs.front().first == ft_pairs.back().first) { // all values same, no proper way to split
-        return numeric_limits<float>::max();
+    if (ft_pairs.front().first == ft_pairs.back().first) {
+        // all values same, no proper way to split without ending up with an empty left child
+        // in this the new entropy will be the same as the parent
+        return {feature_id, curr_node->get_entropy(), -1, -1, -1}; // rest is dummy
     }
+    float min_entropy = numeric_limits<float>::max();
+    float best_left_entropy = -1, best_right_entropy = -1, best_split_thres = -1;
     for (int split_index = first_nontrivial_index; split_index < N; split_index++) {
         int total_samples_left = 0;
         for (int c = 0; c < d.num_classes; c++) {
@@ -104,21 +109,24 @@ float find_info_gain_by_split_on_feature(const Dataset& d, vector<bool> indices,
                 right_entropy -= right_frac_yes * log2(right_frac_yes);
             }
         }
-        entropies[split_index] = 0;
+        float curr_entropy = 0;
         if (total_samples_left != 0) {
-            entropies[split_index] += (1. * total_samples_left / N) * left_entropy;
+            curr_entropy += (1. * total_samples_left / N) * left_entropy;
         }
         if (total_samples_right != 0) {
-            entropies[split_index] += (1. * total_samples_right / N) * right_entropy;
+            curr_entropy += (1. * total_samples_right / N) * right_entropy;
+        }
+        if (curr_entropy < min_entropy) {
+            min_entropy = curr_entropy;
+            best_split_thres = ft_pairs[split_index].first;
+            best_left_entropy = left_entropy;
+            best_right_entropy = right_entropy;
         }
     }
-    // print(entropies, "find_split_feature entropies");
-    int best_split_index = min_element(entropies.begin(), entropies.end()) - entropies.begin();
-    thres = ft_pairs[best_split_index].first;
-    return entropies[best_split_index];
+    return {feature_id, min_entropy, best_split_thres, best_left_entropy, best_right_entropy};
 }
 
-SplitInfo find_split(const Dataset& d, vector<bool> indices) {
+SplitInfo DecisionTree::find_split(const Dataset& d, vector<bool> indices, TreeNode* curr_node) {
     if (none_of(indices.begin(), indices.end(), [](bool x) {
         return x;
     })) {
@@ -129,33 +137,39 @@ SplitInfo find_split(const Dataset& d, vector<bool> indices) {
         return {DecisionTree::NoData, -1};
     }
     bool perfect_split = true;
-    unordered_set<int> possible_labels;
+    int last_label = -1;
     for (int i = 0; i < d.num_samples; i++) {
         if (indices[i]) {
-            possible_labels.insert(d.y[i]);
-            if (possible_labels.size() > 1) {
+            if (last_label == -1) { // not set yet
+                last_label = d.y[i];
+            } else if (last_label != d.y[i]) { // a different label than last, >= labels
                 perfect_split = false;
                 break;
             }
         }
     }
     if (perfect_split) { // all samples are from same label
-        return {DecisionTree::PerfectSplit, -1};
+        return {DecisionTree::PerfectSplit, -1, -1, -1, -1};
     }
-    vector<float> info_gains(d.num_features), thresholds(d.num_features);
+    int best_feature = -1;
+    float min_entropy = numeric_limits<float>::max();
+    float best_left_entropy = -1, best_right_entropy = -1, best_split_thres = -1;
     for (int f = 0; f < d.num_features; f++) {
-        float thres;
-        info_gains[f] = find_info_gain_by_split_on_feature(d, indices, f, thres);
-        thresholds[f] = thres;
+        auto curr_split_info = find_new_entropy_by_split_on_feature(d, indices, f, curr_node);
+        if (curr_split_info.min_entropy < min_entropy) {
+            min_entropy = curr_split_info.min_entropy;
+            best_split_thres = curr_split_info.split_threshold;
+            best_left_entropy = curr_split_info.left_entropy;
+            best_right_entropy = curr_split_info.right_entropy;
+            best_feature = f;
+        }
     }
-    // print(info_gains, "find_split info_gains");
-    int best_feature = min_element(info_gains.begin(), info_gains.end()) - info_gains.begin();
-    if (info_gains[best_feature] == numeric_limits<float>::max()) {
-        // best split is still not proper split, no more splitting possible
-        // only happens when sample feature value all same for all features
-        return {DecisionTree::NoProperSplit, -1};
+    // some extra stuff to check if the SplitInfo meets our requirement
+    float info_gain = curr_node->get_entropy() - min_entropy;
+    if (info_gain < INFO_GAIN_THRESHOLD) {
+        return {DecisionTree::NoGain, -1, -1, -1, -1};
     }
-    return {best_feature, thresholds[best_feature]};
+    return {best_feature, min_entropy, best_split_thres, best_left_entropy, best_right_entropy};
 }
 
 void split_data(vector<bool>& indices, const Dataset& d, int feature_id, FeatureComparator* f) {
@@ -190,11 +204,12 @@ DecisionTree::DecisionTree(int max_num_leaves_) {
 void DecisionTree::train(const Dataset &d) {
     int curr_node_id = 0;
     vector<bool> all_indices(d.num_samples, true);
-    root = new TreeNode(curr_node_id++, all_indices);
+    float dummy_large_entropy = 1e3; // hack! coz we always split when we start anyways
+    root = new TreeNode(curr_node_id++, all_indices, dummy_large_entropy);
     root->set_majority_label(get_majority_label(d, all_indices));
     list<TreeNode*> work_queue;
     work_queue.push_back(root);
-    while (num_leaves < max_num_leaves) {
+    while (num_leaves + work_queue.size() < max_num_leaves) {
         if (work_queue.empty()) {
             print("done", "work queue empty, exit");
             return;
@@ -205,33 +220,32 @@ void DecisionTree::train(const Dataset &d) {
         // find split according to the data in curr
         vector<bool>& curr_indices = curr->sample_indices;
         print(curr->node_id, "working on splitting node id");
-        curr->split_info = find_split(d, curr_indices);
-        if (curr->split_info.feature_id < 0) { // no need to split
+        curr->split_info = find_split(d, curr_indices, curr);
+        if (curr->split_info.split_feature_id < 0) { // no need to split
             num_leaves++;
-            if (curr->split_info.feature_id == DecisionTree::NoProperSplit) {
+            if (curr->split_info.split_feature_id == DecisionTree::NoProperSplit) {
                 cout << "no proper way to split data for node " << curr->node_id << endl;
             } else {
                 cout << "perfect split already for node " << curr->node_id << endl;
             }
+            curr->set_majority_label(get_majority_label(d, curr->sample_indices));
             continue;
         }
-        print(curr->split_info.feature_id, "split on feature:");
-        print(curr->split_info.threshold, "split on threshold:");
+        print(curr->split_info.split_feature_id, "split on feature:");
+        print(curr->split_info.split_threshold, "split on threshold:");
         // split data into two halves
         // modify left_indices, right_indices in place
         vector<bool> left_indices = curr->sample_indices;
         vector<bool> right_indices = curr->sample_indices;
-        auto left_comparator = new FeatureComparatorLT(curr->split_info.threshold);
-        auto right_comparator = new FeatureComparatorGE(curr->split_info.threshold);
-        split_data(left_indices, d, curr->split_info.feature_id, left_comparator);
-        split_data(right_indices, d, curr->split_info.feature_id, right_comparator);
+        auto left_comparator = new FeatureComparatorLT(curr->split_info.split_threshold);
+        auto right_comparator = new FeatureComparatorGE(curr->split_info.split_threshold);
+        split_data(left_indices, d, curr->split_info.split_feature_id, left_comparator);
+        split_data(right_indices, d, curr->split_info.split_feature_id, right_comparator);
         // optional: remove indices in curr since it's no longer useful
         curr->sample_indices.clear();
         // create two child nodes and add to work queue
-        curr->left_child = new TreeNode(curr_node_id++, left_indices);
-        curr->right_child = new TreeNode(curr_node_id++, right_indices);
-        curr->left_child->set_majority_label(get_majority_label(d, left_indices));
-        curr->right_child->set_majority_label(get_majority_label(d, right_indices));
+        curr->left_child = new TreeNode(curr_node_id++, left_indices, curr->split_info.left_entropy);
+        curr->right_child = new TreeNode(curr_node_id++, right_indices, curr->split_info.right_entropy);
         print(curr->left_child->node_id, "new left TreeNode added to queue, node_id:");
         // print(curr->left_child->sample_indices, "with indices:");
         // print(curr->left_child->majority_label, "with majority vote:");
@@ -241,13 +255,16 @@ void DecisionTree::train(const Dataset &d) {
         work_queue.push_back(curr->left_child);
         work_queue.push_back(curr->right_child);
     }
+    for (TreeNode* left_over_node : work_queue) {
+        left_over_node->set_majority_label(get_majority_label(d, left_over_node->sample_indices));
+    }
 }
 
 int DecisionTree::test_single_sample(const Dataset& d, int sample_id) {
     TreeNode* curr = root;
     while (curr) {
-        int curr_feature = curr->split_info.feature_id;
-        float curr_thres = curr->split_info.threshold;
+        int curr_feature = curr->split_info.split_feature_id;
+        float curr_thres = curr->split_info.split_threshold;
         print(curr->node_id, "test_single_sample node_id");
         print(curr_feature, "test_single_sample curr_feature");
         print(curr_thres, "test_single_sample curr_thres");

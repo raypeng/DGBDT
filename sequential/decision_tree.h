@@ -13,6 +13,7 @@
 class DecisionTree {
 private:
 
+    double _t, _t2;
     int num_leaves;
     int max_num_leaves;
     int max_depth;

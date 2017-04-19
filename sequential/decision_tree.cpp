@@ -9,6 +9,7 @@
 
 #include "decision_tree.h"
 #include "mypprint.hpp"
+#include "CycleTimer.h"
 
 #define INFO_GAIN_THRESHOLD 1e-3
 
@@ -49,6 +50,8 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, v
     // so only pick smallest total entropy after split
     // equivalent to taking entropy before split as zero
     print(feature_id, "find_split_feature feature_id");
+    double _tt = CycleTimer::currentSeconds();
+    _t -= _tt;
     vector<pair<float, int>> ft_pairs; // feature_target_pairs
     vector<int> num_yes_before(d.num_classes, 0);
     for (int i = 0; i < d.num_samples; i++) {
@@ -57,13 +60,21 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, v
             num_yes_before[d.y[i]]++;
         }
     }
+    _t += CycleTimer::currentSeconds();
+    // cerr << "find_split inner construct ft_pairs \t taking " << CycleTimer::currentSeconds() - _tt << "s" << endl;
+    _tt = CycleTimer::currentSeconds();
+    _t2 -= _tt;
     // print(num_yes_before, "find_split_feature num_yes_before");
     int N = ft_pairs.size();
     sort(ft_pairs.begin(), ft_pairs.end(), [](const pair<float, int>& a, const pair<float, int>& b) {
         return a.first < b.first;
     });
+    _t2 += CycleTimer::currentSeconds();
+    // _t += CycleTimer::currentSeconds();
+    // cerr << "find_split inner sorting ft_pairs \t taking " << CycleTimer::currentSeconds() - _tt << "s" << endl;
     // print(ft_pairs, "find_split_feature ft_pairs");
     // get statistics of how many samples are from each class that says yes to feature < thres
+    _tt = CycleTimer::currentSeconds();
     vector<vector<int>> num_yes(d.num_classes, vector<int>(N));
     for (int c = 0; c < d.num_classes; c++) {
         int count = 0;
@@ -124,6 +135,7 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, v
             best_right_entropy = right_entropy;
         }
     }
+    // cerr << "find_split inner main loops entropy \t taking " << CycleTimer::currentSeconds() - _tt << "s" << endl;
     return {feature_id, min_entropy, best_split_thres, best_left_entropy, best_right_entropy};
 }
 
@@ -146,6 +158,8 @@ SplitInfo DecisionTree::find_split(const Dataset& d, vector<bool> indices, TreeN
         return {stop_result.second, -1, -1, -1, -1};
     }
 
+    _t = 0, _t2 = 0;
+    double _tt = CycleTimer::currentSeconds();
     for (int f = 0; f < d.num_features; f++) {
         auto curr_split_info = find_new_entropy_by_split_on_feature(d, indices, f, curr_node);
         if (curr_split_info.min_entropy < min_entropy) {
@@ -156,6 +170,9 @@ SplitInfo DecisionTree::find_split(const Dataset& d, vector<bool> indices, TreeN
             best_feature = f;
         }
     }
+    cerr << "find_split outer main loop \t taking " << CycleTimer::currentSeconds() - _tt << "s" << endl;
+    cerr << "find_split outer copying \t taking " << _t << "s" << endl;
+    cerr << "find_split outer sorting \t taking " << _t2 << "s" << endl;
     // some extra stuff to check if the SplitInfo meets our requirement
     float info_gain = curr_node->get_entropy() - min_entropy;
     if (info_gain < INFO_GAIN_THRESHOLD) {
@@ -165,6 +182,7 @@ SplitInfo DecisionTree::find_split(const Dataset& d, vector<bool> indices, TreeN
 }
 
 void split_data(vector<bool>& indices, const Dataset& d, int feature_id, FeatureComparator* f) {
+    double _t = CycleTimer::currentSeconds();
     print(feature_id, "split_data feature_id");
     const vector<float>& values = d.x[feature_id];
     for (int i = 0; i < d.num_samples; i++) {
@@ -172,6 +190,7 @@ void split_data(vector<bool>& indices, const Dataset& d, int feature_id, Feature
             indices[i] = f->compare(values[i]);
         }
     }
+    cerr << "split_data\t taking " << CycleTimer::currentSeconds() - _t << "s" << endl;
 }
 
 pair<bool, NodeStatus> DecisionTree::should_stop(const Dataset& d, vector<bool>& indices, TreeNode* curr) {
@@ -228,6 +247,7 @@ void DecisionTree::train(const Dataset &d) {
     root->set_majority_label(get_majority_label(d, all_indices));
     list<TreeNode*> work_queue;
     work_queue.push_back(root);
+    double _t; // DEBUG
     while (num_leaves + work_queue.size() < max_num_leaves) {
         if (work_queue.empty()) {
             print("done", "work queue empty, exit");
@@ -239,7 +259,9 @@ void DecisionTree::train(const Dataset &d) {
         // find split according to the data in curr
         vector<bool>& curr_indices = curr->sample_indices;
         print(curr->node_id, "working on splitting node id");
+        _t = CycleTimer::currentSeconds();
         curr->split_info = find_split(d, curr_indices, curr);
+        cerr << "find_split for node " << curr->node_id << "\t taking " << CycleTimer::currentSeconds() - _t << "s" << endl;
         if (curr->split_info.split_feature_id < 0) { // no need to split
             num_leaves++;
             switch (curr->split_info.split_feature_id) {

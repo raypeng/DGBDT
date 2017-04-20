@@ -6,6 +6,7 @@
 #include <cmath>
 #include <limits>
 #include <algorithm>
+#include <iterator>
 
 #include "decision_tree.h"
 #include "mypprint.hpp"
@@ -45,27 +46,24 @@ public:
     }
 };
 
-SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, vector<bool> indices, int feature_id, TreeNode* curr_node) {
+SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, vector<int> indices, int feature_id, TreeNode* curr_node) {
     // entropy before split does not affect comparing info gain values across different features to split
     // so only pick smallest total entropy after split
     // equivalent to taking entropy before split as zero
     print(feature_id, "find_split_feature feature_id");
     double _tt = CycleTimer::currentSeconds();
     _t -= _tt;
-    vector<pair<float, int>> ft_pairs; // feature_target_pairs
-    vector<int> num_yes_before(d.num_classes, 0);
-    for (int i = 0; i < d.num_samples; i++) {
-        if (indices[i]) {
-            ft_pairs.push_back(make_pair(d.x[feature_id][i], d.y[i]));
-            num_yes_before[d.y[i]]++;
-        }
+    int N = curr_node->right - curr_node->left;
+    vector<pair<float, int>> ft_pairs(N); // feature_target_pairs
+    for (int i = 0; i < N; i++) {
+        int index = indices[i + curr_node->left];
+        ft_pairs[i] = make_pair(d.x[feature_id][index], d.y[index]);
     }
     _t += CycleTimer::currentSeconds();
     // cerr << "find_split inner construct ft_pairs \t taking " << CycleTimer::currentSeconds() - _tt << "s" << endl;
     _tt = CycleTimer::currentSeconds();
     _t2 -= _tt;
     // print(num_yes_before, "find_split_feature num_yes_before");
-    int N = ft_pairs.size();
     sort(ft_pairs.begin(), ft_pairs.end(), [](const pair<float, int>& a, const pair<float, int>& b) {
         return a.first < b.first;
     });
@@ -75,26 +73,13 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, v
     // print(ft_pairs, "find_split_feature ft_pairs");
     // get statistics of how many samples are from each class that says yes to feature < thres
     _tt = CycleTimer::currentSeconds();
-    vector<vector<int>> num_yes(d.num_classes, vector<int>(N));
-    for (int c = 0; c < d.num_classes; c++) {
-        int count = 0;
-        for (int i = 0; i < ft_pairs.size(); i++) {
-            if (i > 0 && ft_pairs[i].first == ft_pairs[i - 1].first) {
-                num_yes[c][i] = num_yes[c][i - 1];
-            } else {
-                num_yes[c][i] = count;
-            }
-            count += (ft_pairs[i].second == c);
-        }
-    }
 
     // print(num_yes, "find_split_feature num_yes");
     int first_nontrivial_index = 1;
-    while (first_nontrivial_index < N &&
-           ft_pairs[first_nontrivial_index].first == ft_pairs[first_nontrivial_index - 1].first) {
-        first_nontrivial_index++;
-    }
-    print(first_nontrivial_index, "first non_trivial ");
+    vector<int> left_dist(d.num_classes,0);
+    vector<int>& class_dist = curr_node->get_class_dist();
+    left_dist[ft_pairs[0].second]++;
+
     if (ft_pairs.front().first == ft_pairs.back().first) {
         // all values same, no proper way to split without ending up with an empty left child
         // in this the new entropy will be the same as the parent
@@ -102,20 +87,28 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, v
     }
     float min_entropy = numeric_limits<float>::max();
     float best_left_entropy = -1, best_right_entropy = -1, best_split_thres = -1;
-    for (int split_index = first_nontrivial_index; split_index < N; split_index++) {
-        int total_samples_left = 0;
-        for (int c = 0; c < d.num_classes; c++) {
-            total_samples_left += num_yes[c][split_index];
+
+    for (int split_index = 1; split_index < N; split_index++) {
+        while (ft_pairs[split_index].first == ft_pairs[split_index - 1].first && split_index < N) {
+            left_dist[ft_pairs[split_index].second]++;
+            split_index++;
         }
+
+        if (split_index == N) {
+            break;
+        }
+
+        int total_samples_left = split_index;
         int total_samples_right = N - total_samples_left;
+
         float left_entropy = 0, right_entropy = 0;
         for (int c = 0; c < d.num_classes; c++) {
-            int left_samples_per_class = num_yes[c][split_index];
+            int left_samples_per_class = left_dist[c];
             if (left_samples_per_class != 0) {
                 float left_frac_yes = 1. * left_samples_per_class / total_samples_left;
                 left_entropy -= left_frac_yes * log2(left_frac_yes);
             }
-            int right_samples_per_class = num_yes_before[c] - left_samples_per_class;
+            int right_samples_per_class = class_dist[c] - left_samples_per_class;
             if (right_samples_per_class != 0) {
                 float right_frac_yes = 1. * right_samples_per_class / total_samples_right;
                 right_entropy -= right_frac_yes * log2(right_frac_yes);
@@ -124,7 +117,7 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, v
         float curr_entropy = 0;
         if (total_samples_left != 0) {
             curr_entropy += (1. * total_samples_left / N) * left_entropy;
-        }
+       }
         if (total_samples_right != 0) {
             curr_entropy += (1. * total_samples_right / N) * right_entropy;
         }
@@ -134,12 +127,13 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, v
             best_left_entropy = left_entropy;
             best_right_entropy = right_entropy;
         }
+        left_dist[ft_pairs[split_index].second]++;
     }
     // cerr << "find_split inner main loops entropy \t taking " << CycleTimer::currentSeconds() - _tt << "s" << endl;
     return {feature_id, min_entropy, best_split_thres, best_left_entropy, best_right_entropy};
 }
 
-SplitInfo DecisionTree::find_split(const Dataset& d, vector<bool> indices, TreeNode* curr_node) {
+SplitInfo DecisionTree::find_split(const Dataset& d, vector<int>& indices, TreeNode* curr_node) {
     if (none_of(indices.begin(), indices.end(), [](bool x) {
         return x;
     })) {
@@ -153,7 +147,7 @@ SplitInfo DecisionTree::find_split(const Dataset& d, vector<bool> indices, TreeN
     float min_entropy = numeric_limits<float>::max();
     float best_left_entropy = -1, best_right_entropy = -1, best_split_thres = -1;
 
-    pair<bool, NodeStatus> stop_result = should_stop(d, indices, curr_node);
+    pair<bool, NodeStatus> stop_result = should_stop(curr_node);
     if (stop_result.first) {
         return {stop_result.second, -1, -1, -1, -1};
     }
@@ -174,6 +168,7 @@ SplitInfo DecisionTree::find_split(const Dataset& d, vector<bool> indices, TreeN
     cerr << "find_split outer copying \t taking " << _t << "s" << endl;
     cerr << "find_split outer sorting \t taking " << _t2 << "s" << endl;
     // some extra stuff to check if the SplitInfo meets our requirement
+    //
     float info_gain = curr_node->get_entropy() - min_entropy;
     if (info_gain < INFO_GAIN_THRESHOLD) {
         return {NoGain, -1, -1, -1, -1};
@@ -181,28 +176,42 @@ SplitInfo DecisionTree::find_split(const Dataset& d, vector<bool> indices, TreeN
     return {best_feature, min_entropy, best_split_thres, best_left_entropy, best_right_entropy};
 }
 
-void split_data(vector<bool>& indices, const Dataset& d, int feature_id, FeatureComparator* f) {
+// Partitions indices according to the node.
+//
+// Returns the index of the split.
+int DecisionTree::split_data(vector<int>& indices, const Dataset& d, TreeNode* curr_node) {
+
+    int feature_id = curr_node->split_info.split_feature_id;
+    float thresh = curr_node->split_info.split_threshold;
+
     double _t = CycleTimer::currentSeconds();
     print(feature_id, "split_data feature_id");
-    const vector<float>& values = d.x[feature_id];
-    for (int i = 0; i < d.num_samples; i++) {
-        if (indices[i]) {
-            indices[i] = f->compare(values[i]);
-        }
-    }
+
+    const vector<float>& feature_row = d.x[feature_id];
+    auto begin = indices.begin() + curr_node->get_left();
+    auto end = indices.begin() + curr_node->get_right();
+    auto bound = stable_partition(begin, end,
+            [&feature_row, &thresh](const int index) {
+                return feature_row[index] < thresh;
+            });
+
     cerr << "split_data\t taking " << CycleTimer::currentSeconds() - _t << "s" << endl;
+
+    return distance(indices.begin(), bound);
 }
 
-pair<bool, NodeStatus> DecisionTree::should_stop(const Dataset& d, vector<bool>& indices, TreeNode* curr) {
+pair<bool, NodeStatus> DecisionTree::should_stop(TreeNode* curr) {
+
     bool perfect_split = true;
-    int last_label = -1;
-    for (int i = 0; i < d.num_samples; i++) {
-        if (indices[i]) {
-            if (last_label == -1) { // not set yet
-                last_label = d.y[i];
-            } else if (last_label != d.y[i]) { // a different label than last, >= labels
+    bool found_class = false;
+    vector<int>& class_dist = curr->get_class_dist();
+    for (int i = 0; i < class_dist.size(); i++) {
+        if (class_dist[i] > 0) {
+            if (found_class) {
                 perfect_split = false;
                 break;
+            } else {
+                found_class = true;
             }
         }
     }
@@ -217,19 +226,6 @@ pair<bool, NodeStatus> DecisionTree::should_stop(const Dataset& d, vector<bool>&
     return {false, Ok};
 }
 
-int get_majority_label(const Dataset& d, vector<bool>& indices) {
-    vector<int> votes(d.num_classes);
-    int num_active = 0;
-    for (int i = 0; i < d.num_samples; i++) {
-        if (indices[i]) {
-            num_active++;
-            votes[d.y[i]]++;
-        }
-    }
-    print(num_active, "num_active ");
-    return max_element(votes.begin(), votes.end()) - votes.begin();
-}
-
 DecisionTree::DecisionTree(int max_num_leaves_, int max_depth_,
       int min_node_size_) {
     num_leaves = 0;
@@ -240,13 +236,26 @@ DecisionTree::DecisionTree(int max_num_leaves_, int max_depth_,
 }
 
 void DecisionTree::train(const Dataset &d) {
+
+    // Setup root node.
+
     int curr_node_id = 0;
-    vector<bool> all_indices(d.num_samples, true);
+
     float dummy_large_entropy = 1e3; // hack! coz we always split when we start anyways
-    root = new TreeNode(curr_node_id++, all_indices, 0, d.num_samples, dummy_large_entropy);
-    root->set_majority_label(get_majority_label(d, all_indices));
+    root = new TreeNode(curr_node_id++, 0, d.num_samples, dummy_large_entropy, 0, d.num_samples);
+    vector<int>& class_dist = root->get_class_dist();
+    class_dist.resize(d.num_classes,0);
+
+    vector<int> indices(d.num_samples);
+    for (int i = 0; i < d.num_samples; i++) {
+        indices[i] = i;
+        class_dist[d.y[i]] += 1;
+    }
+
     list<TreeNode*> work_queue;
     work_queue.push_back(root);
+
+    // Pop leaves from work queue to split in a BFS order.
     double _t; // DEBUG
     while (num_leaves + work_queue.size() < max_num_leaves) {
         if (work_queue.empty()) {
@@ -256,12 +265,13 @@ void DecisionTree::train(const Dataset &d) {
         // remove a node from work queue to perform split on
         TreeNode* curr = work_queue.front();
         work_queue.pop_front();
+
         // find split according to the data in curr
-        vector<bool>& curr_indices = curr->sample_indices;
         print(curr->node_id, "working on splitting node id");
         _t = CycleTimer::currentSeconds();
-        curr->split_info = find_split(d, curr_indices, curr);
+        curr->split_info = find_split(d, indices, curr);
         cerr << "find_split for node " << curr->node_id << "\t taking " << CycleTimer::currentSeconds() - _t << "s" << endl;
+
         if (curr->split_info.split_feature_id < 0) { // no need to split
             num_leaves++;
             switch (curr->split_info.split_feature_id) {
@@ -274,39 +284,52 @@ void DecisionTree::train(const Dataset &d) {
                 case MinSize:
                     cout << "node at min size with id " << curr->node_id << endl;
                     break;
+                case NoGain:
+                    cout << "node had no gain " << curr->node_id << endl;
+                    break;
                 default:
                     cout << "node became leaf for unknown reason " << curr->node_id << endl;
             }
-            curr->set_majority_label(get_majority_label(d, curr->sample_indices));
+            curr->update_majority_label();
             continue;
         }
         print(curr->split_info.split_feature_id, "split on feature:");
         print(curr->split_info.split_threshold, "split on threshold:");
         // split data into two halves
-        // modify left_indices, right_indices in place
-        vector<bool> left_indices = curr->sample_indices;
-        vector<bool> right_indices = curr->sample_indices;
-        auto left_comparator = new FeatureComparatorLT(curr->split_info.split_threshold);
-        auto right_comparator = new FeatureComparatorGE(curr->split_info.split_threshold);
-        split_data(left_indices, d, curr->split_info.split_feature_id, left_comparator);
-        split_data(right_indices, d, curr->split_info.split_feature_id, right_comparator);
-        // optional: remove indices in curr since it's no longer useful
-        curr->sample_indices.clear();
+        int split_index = split_data(indices, d, curr);
+
         // create two child nodes and add to work queue
         // TODO: make the size of the node actually real after partitioning is implemented
-        curr->left_child = new TreeNode(curr_node_id++, left_indices, curr->get_depth()+1, d.num_samples, curr->split_info.left_entropy);
-        curr->right_child = new TreeNode(curr_node_id++, right_indices, curr->get_depth()+1, d.num_samples, curr->split_info.right_entropy);
+        curr->left_child = new TreeNode(curr_node_id++, curr->get_depth()+1, d.num_samples, curr->split_info.left_entropy, curr->left, split_index);
+        curr->right_child = new TreeNode(curr_node_id++, curr->get_depth()+1, d.num_samples, curr->split_info.right_entropy, split_index, curr->right);
+
+        // Update class distributions
+        vector<int>& left_dist = curr->left_child->get_class_dist();
+        vector<int>& right_dist = curr->right_child->get_class_dist();
+        vector<int>& curr_dist = curr->get_class_dist();
+        left_dist.resize(d.num_classes, 0);
+        right_dist.resize(d.num_classes, 0);
+
+        for (int i = curr->left; i < split_index; i++) {
+            int index = indices[i];
+            left_dist[d.y[index]]++;
+        }
+
+        // Calculate right_dist by using left_dist
+        for (int c = 0; c < d.num_classes; c++) {
+            right_dist[c] = curr_dist[c] - left_dist[c];
+        }
+
+        cout<< "split index: " << split_index << endl;
         print(curr->left_child->node_id, "new left TreeNode added to queue, node_id:");
-        // print(curr->left_child->sample_indices, "with indices:");
-        // print(curr->left_child->majority_label, "with majority vote:");
+        cout<< "left size: " << curr->left_child->right - curr->left_child->left << endl;
         print(curr->right_child->node_id, "new right TreeNode added to queue, node_id:");
-        // print(curr->right_child->sample_indices, "with indices: ");
-        // print(curr->right_child->majority_label, "with majority vote:");
+        cout<< "right size: " << curr->right_child->right - curr->right_child->left << endl;
         work_queue.push_back(curr->left_child);
         work_queue.push_back(curr->right_child);
     }
     for (TreeNode* left_over_node : work_queue) {
-        left_over_node->set_majority_label(get_majority_label(d, left_over_node->sample_indices));
+        left_over_node->update_majority_label();
     }
 }
 

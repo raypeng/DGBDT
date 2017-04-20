@@ -13,6 +13,7 @@ print 'test shape', x_test.shape, y_test.shape
 # print 'test', x_test[0], y_test[0]
 
 c = tree.DecisionTreeClassifier(criterion='entropy', max_leaf_nodes=32)
+print 'start train'
 c.fit(x_train, y_train)
 print 'train accuracy:', c.score(x_train, y_train)
 print 'test accuracy:', c.score(x_test, y_test)

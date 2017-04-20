@@ -1,4 +1,4 @@
-/* 
+/*
    my pretty print << overloads for common stl containers including:
    vector, list, stack, (priority_)queue, (unordered_)set, (unordered_)map
    and newly tuple
@@ -21,7 +21,7 @@
 #include <tuple>
 #include <type_traits>
 
-// #define debug
+//#define debug
 
 namespace std {
 
@@ -205,14 +205,14 @@ namespace std {
     os << get<n>(tup);
     print_tuple<n+1>(os, tup);
   }
-    
+
     template <typename... T>
     ostream& operator<<(ostream& os, const tuple<T...>& tup) {
       os << "<";
       print_tuple<0>(os, tup);
       return os << ">";
     }
-  
+
 }
 
 

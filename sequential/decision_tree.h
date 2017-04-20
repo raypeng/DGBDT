@@ -20,9 +20,10 @@ private:
     int min_node_size;
     TreeNode* root;
 
-    SplitInfo find_new_entropy_by_split_on_feature(const Dataset& d, vector<bool> indices, int feature_id, TreeNode* curr_node);
-    SplitInfo find_split(const Dataset& d, vector<bool> indices, TreeNode* curr_node);
-    pair<bool, NodeStatus> should_stop(const Dataset& d, vector<bool>& indices, TreeNode* curr);
+    SplitInfo find_new_entropy_by_split_on_feature(const Dataset& d, vector<int> indices, int feature_id, TreeNode* curr_node);
+    SplitInfo find_split(const Dataset& d, vector<int>& indices, TreeNode* curr_node);
+    pair<bool, NodeStatus> should_stop(TreeNode* curr);
+    int split_data(vector<int>& indices, const Dataset& d, TreeNode* curr_node);
 
 public:
     // potentially more hyperparams

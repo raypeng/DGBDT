@@ -7,6 +7,8 @@
 
 #include <iostream>
 #include <vector>
+#include <algorithm>
+#include <iterator>
 
 using namespace std;
 
@@ -25,21 +27,24 @@ class TreeNode {
 private:
     int node_id;
     SplitInfo split_info;
-    vector<bool> sample_indices;
+    vector<int> class_dist;
     float entropy;
     TreeNode* left_child;
     TreeNode* right_child;
     int majority_label;
     int depth;
     int size;
+    int left;
+    int right;
 
 public:
-    TreeNode(int node_id_, vector<bool>& sample_indices_, int depth_, int size_, float entropy_) :
+    TreeNode(int node_id_, int depth_, int size_, float entropy_, int left_, int right_) :
             node_id(node_id_),
-            sample_indices(sample_indices_),
             depth(depth_),
             size(size_),
             entropy(entropy_),
+            left(left_),
+            right(right_),
             left_child(NULL),
             right_child(NULL),
             split_info({ -1, -999}),
@@ -47,8 +52,18 @@ public:
         cout << "node created with id " << node_id << endl;
     }
 
-    void set_majority_label(int label) {
-        majority_label = label;
+    vector<int>& get_class_dist() {
+        return class_dist;
+    }
+
+    void set_class_dist(vector<int> dist) {
+        class_dist = dist;
+    }
+
+    void update_majority_label() {
+        int* data = class_dist.data();
+        majority_label = distance(data, max_element(data,
+                    data + class_dist.size()));
     }
 
     void set_entropy(float entropy_) {
@@ -69,6 +84,14 @@ public:
 
     int get_size() {
         return size;
+    }
+
+    int get_left() {
+        return left;
+    }
+
+    int get_right() {
+        return right;
     }
 
     // for debugging

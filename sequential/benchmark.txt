@@ -1,3 +1,9 @@
 MSLTR	s4: train, s5: test, max_leave_nodes: 32
 ours:	    88s
 sklearn:    15s
+
+alex computer (run in isolation):
+
+old: 105s
+new: 51s
+sklearn: 16s

@@ -5,6 +5,7 @@
 #include "dataset.h"
 #include "decision_tree.h"
 #include "mypprint.hpp"
+#include "CycleTimer.h"
 
 using namespace std;
 
@@ -14,7 +15,7 @@ int main() {
 
     Dataset d = dp.parse_tsv("../dataset/big/mslr10k.s4.tab.txt", 136, 5);
 
-    //Dataset d = dp.parse_tsv("../dataset/iris.data.tab.txt", 4, 3);
+    // Dataset d = dp.parse_tsv("../dataset/iris.data.tab.txt", 4, 3);
     // Dataset d = dp.parse_tsv("../dataset/wiki.txt", 3, 2);
 
     cout << "d.num_samples:" << d.num_samples << endl;
@@ -25,8 +26,10 @@ int main() {
 
     DecisionTree dt = DecisionTree(32);
     cout << "training started" << endl;
+    double _t = CycleTimer::currentSeconds();
     dt.train(d);
     cout << "training done" << endl;
+    cout << "training has taken " << CycleTimer::currentSeconds() - _t << "s" << endl;
     cout << "test on sample 0, predicted label: " << dt.test_single_sample(d, 0) << endl;
     cout << "test on training set, accuracy: " << dt.test(d) << endl;
     Dataset t = dp.parse_tsv("../dataset/big/mslr10k.s5.tab.txt", 136, 5);

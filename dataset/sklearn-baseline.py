@@ -1,4 +1,5 @@
 import sys
+import time
 import numpy as np
 from sklearn import tree
 
@@ -14,7 +15,10 @@ print 'test shape', x_test.shape, y_test.shape
 
 c = tree.DecisionTreeClassifier(criterion='entropy', max_leaf_nodes=32)
 print 'start train'
+_t = time.time()
 c.fit(x_train, y_train)
+print 'training has taken', time.time() - _t
+
 print 'train accuracy:', c.score(x_train, y_train)
 print 'test accuracy:', c.score(x_test, y_test)
 

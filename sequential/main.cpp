@@ -24,12 +24,27 @@ int main() {
     // cout << "d.y " << d.y << endl;
     // cout << "d.x[0]" << d.x[0] << endl;
 
+
+    cout << "starting building bins" << endl;
+    float bin_start = CycleTimer::currentSeconds();
+    d.build_bins(1500);
+    float bin_end = CycleTimer::currentSeconds();
+    float bin_time = bin_end - bin_start;
+    cout << "building bins took: " << bin_time << " seconds" << endl;
+
+    /*
+    cout << "bins: " << d.bins << endl;
+    cout << "num bins: " << d.num_bins << endl;
+    cout << "bin edges: " << d.bin_edges << endl;
+    cout << "bin dists: " << d.bin_dists << endl;
+    */
+
     DecisionTree dt = DecisionTree(32);
     cout << "training started" << endl;
     double _t = CycleTimer::currentSeconds();
     dt.train(d);
     cout << "training done" << endl;
-    cout << "training has taken " << CycleTimer::currentSeconds() - _t << "s" << endl;
+    cout << "training has taken " << (CycleTimer::currentSeconds() - _t) + bin_time << "s" << endl;
     cout << "test on sample 0, predicted label: " << dt.test_single_sample(d, 0) << endl;
     cout << "test on training set, accuracy: " << dt.test(d) << endl;
     Dataset t = dp.parse_tsv("../dataset/big/mslr10k.s5.tab.txt", 136, 5);

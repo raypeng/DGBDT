@@ -9,9 +9,6 @@ Alex Xiao (axiao@andrew.cmu.edu)
 Rui Peng (ruip@andrew.cmu.edu)
 
 
-
-# Project Checkpoint
-
 ## Updated Schedule
 
 April 10 - April 16

@@ -12,8 +12,6 @@ Rui Peng (ruip@andrew.cmu.edu)
 
 # Project Checkpoint
 
-
-
 ## Updated Schedule
 
 April 10 - April 16
@@ -60,19 +58,13 @@ From profiling the current implementation, we found that the histogram binning s
 
 ## Parallel Competition
 
-We plan to show a couple of graphs detailing how our optimizations impact runtime. Specifically, we are thinking of a graph showing how we scale across multiple nodes,
-a graph comparing GPU vs no GPU on a single node, and a graph showing speedups of
-histogram binning with multiple CPU threads.
+We plan to show a couple of graphs detailing how our optimizations impact runtime. Specifically, we are thinking of a graph showing how we scale across multiple nodes, a graph comparing GPU vs no GPU on a single node, and a graph showing speedups of histogram binning with multiple CPU threads.
 
 ## Preliminary Results
 
-We've been benchmarking our sequential version against scikit-learn and now have
-optimized it such that when training a single tree with max leaves of 32 our implementation
-beats it scikit-learn by over a factor of 2. Initial profiling shows that our histogram binning
-takes up a good portion of our training time, so we will look into parallelizing that.
+We've been benchmarking our sequential version against scikit-learn and now have optimized it such that when training a single tree with max leaves of 32 our implementation beats it scikit-learn by over a factor of 2. Initial profiling shows that our histogram binning takes up a good portion of our training time, so we will look into parallelizing that.
 
 ## Concerns
 
-We are mainly concerned about getting enough space on GHC and latedays to run full experiements. We couldn't get our datasets copied over, so hopefully we will be able to
-work with course staff to resolve this.
+We are mainly concerned about getting enough space on GHC and latedays to run full experiements. We couldn't get our datasets copied over, so hopefully we will be able to work with course staff to resolve this.
 

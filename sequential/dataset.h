@@ -50,6 +50,7 @@ struct Dataset {
         bin_edges.resize(num_features);
         bin_dists.resize(num_features);
 
+#pragma omp parallel for schedule(static)
         for (int f = 0; f < num_features; f++) {
             vector<float>& feature_row  = x[f];
             sort(feature_row.begin(), feature_row.end());

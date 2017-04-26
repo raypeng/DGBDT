@@ -20,15 +20,15 @@ Dataset DatasetParser::parse_tsv(string file_path, int num_features, int num_cla
     string label, curr;
     int num_labels = 0;
     while (!infile.eof()) {
-        for (int i = 0; i < d.num_features; i++) {
-            infile >> curr;
-            d.x[i].push_back(stod(curr));
-        }
         infile >> label;
         if (label_map.find(label) == label_map.end()) {
             label_map[label] = num_labels++;
         }
         d.y.push_back(label_map[label]);
+        for (int i = 0; i < d.num_features; i++) {
+            infile >> curr;
+            d.x[i].push_back(stod(curr));
+        }
     }
     d.num_samples = d.y.size();
     cout << "parsing done\n";

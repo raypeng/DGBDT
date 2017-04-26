@@ -1,5 +1,4 @@
 CXXFLAGS='-std=c++11'
-g++='/opt/gcc/4.9.2/bin/g++'
 
 OBJS = main.o dataset.o decision_tree.o
 

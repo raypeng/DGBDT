@@ -8,7 +8,7 @@ def preprocess(line):
     chunks = line.strip().split(',')
     label = chunks[0]
     features = chunks[1:]
-    new_chunks = features + [label]
+    new_chunks = [label] + features
     return '\t'.join(new_chunks)
 
 with open(in_file, 'r') as f:

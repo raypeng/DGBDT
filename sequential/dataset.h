@@ -45,13 +45,16 @@ struct Dataset {
 
         bins.resize(num_features);
         bin_edges.resize(num_features);
+        num_bins.resize(num_features);
 
 
-//#pragma omp parallel {
+#pragma omp parallel
+        {
+
 // (original index, feature value) pairs
         vector<pair<int,float>> ft_pairs(num_samples);
 
-//#pragma omp for schedule(static);
+#pragma omp for schedule(static)
         for (int f = 0; f < num_features; f++) {
             vector<float>& feature_row  = x[f];
 
@@ -117,7 +120,7 @@ struct Dataset {
                     f_bin_edges[curr_bin] = prev_v;
 
                     int n = curr_bin + 1;
-                    num_bins.push_back(n);
+                    num_bins[f] = n;
                     f_bin_edges.resize(n);
 
                     break;
@@ -126,7 +129,7 @@ struct Dataset {
         }
 
     }
-    //}
+    }
 };
 
 class DatasetParser {

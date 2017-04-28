@@ -5,6 +5,9 @@ OBJS = main.o dataset.o decision_tree.o
 main: $(OBJS)
 	g++ $(CXXFLAGS) -o $@ $(OBJS) -lm
 
+openmp: $(OBJS)
+	g++ $(CXXFLAGS) -fopenmp -o $@ $(OBJS) -lm
+
 main.o: main.cpp dataset.h decision_tree.h mypprint.hpp
 	g++ $(CXXFLAGS) -c main.cpp
 

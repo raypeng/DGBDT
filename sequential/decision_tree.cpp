@@ -332,17 +332,26 @@ void DecisionTree::train(Dataset &d) {
             end_index = curr->right;
         }
 
+        vector<int> labels(end_index - start_index);
+
+        for (int i = start_index; i < end_index; i++) {
+            int index = indices[i];
+            int label = d.y[index];
+            labels[i - start_index] = label;
+            smaller_dist[label]++;
+        }
+
         for (int f = 0; f < d.num_features; f++) {
+
+            vector<int>& bins = d.bins[f];
+            vector<vector<int>>& bin_dists = smaller_bin_dist[f];
+
             for (int i = start_index; i < end_index; i++) {
                 int index = indices[i];
-                int label = d.y[index];
+                int label = labels[i - start_index];
 
-                if (f == 0) {
-                    smaller_dist[label]++;
-                }
-
-                int bin = d.bins[f][index];
-                smaller_bin_dist[f][bin][label]++;
+                int bin = bins[index];
+                bin_dists[bin][label]++;
             }
         }
 

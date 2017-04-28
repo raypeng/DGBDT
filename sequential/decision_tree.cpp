@@ -28,11 +28,9 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, v
     int num_bins = d.num_bins[feature_id];
     const vector<int>& bins = d.bins[feature_id];
     vector<int> bin_counts(num_bins, 0);
-    vector<vector<int>> bin_dists(num_bins, vector<int>(d.num_classes,0));
     for (int i = 0; i < N; i++) {
         int index = indices[i + curr_node->left];
         bin_counts[bins[index]]++;
-        bin_dists[bins[index]][d.y[index]]++;
     }
 
     _t += CycleTimer::currentSeconds();
@@ -58,6 +56,7 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, v
     vector<int> left_dist(d.num_classes,0);
     vector<int>& class_dist = curr_node->get_class_dist();
     const vector<float>& bin_edges = d.bin_edges[feature_id];
+    vector<vector<int>>& bin_dists = curr_node->bin_dists_for_feature(feature_id);
 
     float min_entropy = numeric_limits<float>::max();
     int total_samples_left = 0;
@@ -217,7 +216,7 @@ DecisionTree::DecisionTree(int max_num_leaves_, int max_depth_,
     root = NULL;
 }
 
-void DecisionTree::train(const Dataset &d) {
+void DecisionTree::train(Dataset &d) {
 
     // Setup root node.
 
@@ -225,6 +224,16 @@ void DecisionTree::train(const Dataset &d) {
 
     float dummy_large_entropy = 1e3; // hack! coz we always split when we start anyways
     root = new TreeNode(curr_node_id++, 0, d.num_samples, dummy_large_entropy, 0, d.num_samples);
+
+    cout << "starting building bins" << endl;
+    float bin_start = CycleTimer::currentSeconds();
+
+    d.build_bins(255, root);
+
+    float bin_end = CycleTimer::currentSeconds();
+    float bin_time = bin_end - bin_start;
+    cout << "building bins took: " << bin_time << " seconds" << endl;
+
     vector<int>& class_dist = root->get_class_dist();
     class_dist.resize(d.num_classes,0);
 
@@ -294,21 +303,40 @@ void DecisionTree::train(const Dataset &d) {
         curr->left_child = new TreeNode(curr_node_id++, curr->get_depth()+1, d.num_samples, curr->split_info.left_entropy, curr->left, split_index);
         curr->right_child = new TreeNode(curr_node_id++, curr->get_depth()+1, d.num_samples, curr->split_info.right_entropy, split_index, curr->right);
 
-        // Update class distributions
+        // Update class and bin distributions
         vector<int>& left_dist = curr->left_child->get_class_dist();
         vector<int>& right_dist = curr->right_child->get_class_dist();
         vector<int>& curr_dist = curr->get_class_dist();
         left_dist.resize(d.num_classes, 0);
         right_dist.resize(d.num_classes, 0);
 
+        vector<vector<vector<int>>>& left_bin_dist = curr->left_child->setup_bin_dist(d.num_features, d.num_classes, d.num_bins);
+        vector<vector<vector<int>>>& right_bin_dist = curr->right_child->setup_bin_dist(d.num_features, d.num_classes, d.num_bins);
+        vector<vector<vector<int>>>& curr_bin_dist = curr->get_bin_dist();
+
         for (int i = curr->left; i < split_index; i++) {
             int index = indices[i];
-            left_dist[d.y[index]]++;
+            int label = d.y[index];
+            left_dist[label]++;
+
+            // Bad cache behavior, not sure how to improve.
+            for (int f = 0; f < d.num_features; f++) {
+                int bin = d.bins[f][index];
+                left_bin_dist[f][bin][label]++;
+            }
         }
 
 
         // Calculate right_dist by using left_dist
         subtract_vector(right_dist, curr_dist, left_dist);
+
+        // Similarly for bin dist
+        for (int f = 0; f < d.num_features; f++) {
+            for (int bin = 0; bin < d.num_bins[f]; bin++) {
+                subtract_vector(right_bin_dist[f][bin], curr_bin_dist[f][bin],
+                        left_bin_dist[f][bin]);
+            }
+        }
 
         //cout<< "split index: " << split_index << endl;
         print(curr->left_child->node_id, "new left TreeNode added to queue, node_id:");
@@ -321,6 +349,8 @@ void DecisionTree::train(const Dataset &d) {
     for (TreeNode* left_over_node : work_queue) {
         left_over_node->update_majority_label();
     }
+
+    cout << "building bins took: " << bin_time << " seconds" << endl;
 }
 
 int DecisionTree::test_single_sample(const Dataset& d, int sample_id) {

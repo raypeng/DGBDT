@@ -38,9 +38,6 @@ struct Dataset {
     // bin edges to act as split indices for each feature
     vector<vector<float>> bin_edges;
 
-    // num_features by num_bins for feature by num_classes
-    vector<vector<vector<int>>> bin_dists;
-
     // WARNING: calling this will render x to be unusable.
     //
     // Use bins as a discretized dataset after calling this.
@@ -48,43 +45,53 @@ struct Dataset {
 
         bins.resize(num_features);
         bin_edges.resize(num_features);
-        bin_dists.resize(num_features);
 
-#pragma omp parallel for schedule(static)
+
+//#pragma omp parallel {
+// (original index, feature value) pairs
+        vector<pair<int,float>> ft_pairs(num_samples);
+
+//#pragma omp for schedule(static);
         for (int f = 0; f < num_features; f++) {
             vector<float>& feature_row  = x[f];
-            sort(feature_row.begin(), feature_row.end());
 
-            if (feature_row[0] == feature_row[num_samples - 1]) {
+            for (int i = 0; i < num_samples; i++) {
+                ft_pairs[i].first = i;
+                ft_pairs[i].second = feature_row[i];
+            }
+
+            sort(ft_pairs.begin(), ft_pairs.end(), [](const pair<int, float>& a,
+                        const pair<int, float>& b) {
+                return a.second < b.second;
+            });
+
+            //sort(feature_row.begin(), feature_row.end());
+
+            if (ft_pairs[0].second == ft_pairs[num_samples - 1].second) {
                 cerr << "Constant feature, should somehow handle this" << endl;
                 exit(1);
             }
 
-
             vector<int>& f_bins = bins[f];
             vector<float>& f_bin_edges = bin_edges[f];
-            vector<vector<int>>& dists = bin_dists[f];
 
             f_bins.resize(num_samples);
             f_bin_edges.resize(max_bins);
-            dists.resize(max_bins);
 
             float bin_size = START_BIN_SIZE;
 
             while (true) {
 
-                f_bins[0] = 0;
+                f_bins[ft_pairs[0].first] = 0;
                 int curr_bin = 0;
-                vector<int> curr_dist(num_classes);
-                curr_dist[y[0]]++;
 
-                float prev_v = feature_row[0];
-                int bin_left = feature_row[0];
+                float prev_v = ft_pairs[0].second;
+                float bin_left = prev_v;
 
                 bool failed = false;
 
                 for (int i = 1; i < feature_row.size(); i++) {
-                    float v = feature_row[i];
+                    float v = ft_pairs[i].second;
 
                     // Check if we need to create a new bin.
                     if (v > bin_left + bin_size) {
@@ -95,14 +102,11 @@ struct Dataset {
                         }
 
                         f_bin_edges[curr_bin] = prev_v;
-                        dists[curr_bin] = curr_dist;
-                        fill(curr_dist.begin(), curr_dist.end(), 0);
                         bin_left = v;
                         curr_bin++;
                     }
 
-                    f_bins[i] = curr_bin;
-                    curr_dist[y[i]]++;
+                    f_bins[ft_pairs[i].first] = curr_bin;
                     prev_v = v;
                 }
 
@@ -111,12 +115,10 @@ struct Dataset {
                 } else {
 
                     f_bin_edges[curr_bin] = prev_v;
-                    dists[curr_bin] = curr_dist;
 
                     int n = curr_bin + 1;
                     num_bins.push_back(n);
                     f_bin_edges.resize(n);
-                    dists.resize(n);
 
                     break;
                 }
@@ -124,6 +126,7 @@ struct Dataset {
         }
 
     }
+    //}
 };
 
 class DatasetParser {

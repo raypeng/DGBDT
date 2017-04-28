@@ -28,9 +28,11 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, v
     int num_bins = d.num_bins[feature_id];
     const vector<int>& bins = d.bins[feature_id];
     vector<int> bin_counts(num_bins, 0);
+    vector<vector<int>> bin_dists(num_bins, vector<int>(d.num_classes,0));
     for (int i = 0; i < N; i++) {
         int index = indices[i + curr_node->left];
         bin_counts[bins[index]]++;
+        bin_dists[bins[index]][d.y[index]]++;
     }
 
     _t += CycleTimer::currentSeconds();
@@ -55,7 +57,6 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, v
 
     vector<int> left_dist(d.num_classes,0);
     vector<int>& class_dist = curr_node->get_class_dist();
-    const vector<vector<int>>& bin_dists = d.bin_dists[feature_id];
     const vector<float>& bin_edges = d.bin_edges[feature_id];
 
     float min_entropy = numeric_limits<float>::max();
@@ -143,9 +144,11 @@ SplitInfo DecisionTree::find_split(const Dataset& d, vector<int>& indices, TreeN
             best_feature = f;
         }
     }
+    /*
     cerr << "find_split outer main loop \t taking " << CycleTimer::currentSeconds() - _tt << "s" << endl;
     cerr << "find_split outer initializing bin counts \t taking " << _t << "s" << endl;
     cerr << "find_split outer finding split index \t taking " << _t2 << "s" << endl;
+    */
     // some extra stuff to check if the SplitInfo meets our requirement
     //
     float info_gain = curr_node->get_entropy() - min_entropy;
@@ -227,12 +230,8 @@ void DecisionTree::train(const Dataset &d) {
 
     vector<int> indices(d.num_samples);
     for (int i = 0; i < d.num_samples; i++) {
+        class_dist[d.y[i]]++;
         indices[i] = i;
-    }
-
-    // compute class_dist from bin distributions of first feature
-    for (int i = 0; i < d.num_bins[0]; i++) {
-        add_vector(class_dist, class_dist, d.bin_dists[0][i]);
     }
 
     list<TreeNode*> work_queue;
@@ -251,9 +250,12 @@ void DecisionTree::train(const Dataset &d) {
 
         // find split according to the data in curr
         print(curr->node_id, "working on splitting node id");
+        cout << "working on splitting node id: " << curr->node_id << endl;
         _t = CycleTimer::currentSeconds();
         curr->split_info = find_split(d, indices, curr);
+        /*
         cerr << "find_split for node " << curr->node_id << "\t taking " << CycleTimer::currentSeconds() - _t << "s" << endl;
+        */
 
         if (curr->split_info.split_feature_id < 0) { // no need to split
             num_leaves++;
@@ -278,9 +280,15 @@ void DecisionTree::train(const Dataset &d) {
         }
         print(curr->split_info.split_feature_id, "split on feature:");
         print(curr->split_info.split_threshold, "split on threshold:");
+
+        /*
+        cout << "split on feature: " << curr->split_info.split_feature_id << endl;
+        cout << "split on threshold: " << curr->split_info.split_threshold << endl;
+        cout << "split on bin: " << curr->split_info.split_bin << endl;
+        */
+
         // split data into two halves
         int split_index = split_data(indices, d, curr);
-
         // create two child nodes and add to work queue
         // TODO: make the size of the node actually real after partitioning is implemented
         curr->left_child = new TreeNode(curr_node_id++, curr->get_depth()+1, d.num_samples, curr->split_info.left_entropy, curr->left, split_index);
@@ -298,14 +306,15 @@ void DecisionTree::train(const Dataset &d) {
             left_dist[d.y[index]]++;
         }
 
+
         // Calculate right_dist by using left_dist
         subtract_vector(right_dist, curr_dist, left_dist);
 
         //cout<< "split index: " << split_index << endl;
         print(curr->left_child->node_id, "new left TreeNode added to queue, node_id:");
-        //cout<< "left size: " << curr->left_child->right - curr->left_child->left << endl;
+        // cout<< "left size: " << curr->left_child->right - curr->left_child->left << endl;
         print(curr->right_child->node_id, "new right TreeNode added to queue, node_id:");
-        //cout<< "right size: " << curr->right_child->right - curr->right_child->left << endl;
+        // cout<< "right size: " << curr->right_child->right - curr->right_child->left << endl;
         work_queue.push_back(curr->left_child);
         work_queue.push_back(curr->right_child);
     }

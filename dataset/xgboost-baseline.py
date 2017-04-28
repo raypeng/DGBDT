@@ -1,3 +1,4 @@
+import numpy as np
 import sys
 import xgboost as xgb
 
@@ -9,8 +10,13 @@ test = np.genfromtxt(sys.argv[2], delimiter='\t')
 dtrain = xgb.DMatrix(train[:,1:], label=train[:,0])
 dtest = xgb.DMatrix(test[:,1:], label=test[:,0])
 # specify parameters via map
-param = {'max_leaves':255}
+param = {'max_leaves':255, 'objective':'multi:softprob', 'num_class': 5}
 num_round = 1 # should make it regular decision tree
 bst = xgb.train(param, dtrain, num_boost_round=num_round)
 # make prediction
-preds = bst.predict(dtest)
+pred_prob = bst.predict(dtrain)
+pred = np.argmax(pred_prob, axis=1)
+print 'train accuracy', 1. * np.sum(train[:,0] == pred) / pred.size
+pred_prob = bst.predict(dtest)
+pred = np.argmax(pred_prob, axis=1)
+print 'test accuracy', 1. * np.sum(test[:,0] == pred) / pred.size

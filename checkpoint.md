@@ -66,5 +66,6 @@ We've been benchmarking our sequential version against scikit-learn and now have
 
 ## Concerns
 
-We are mainly concerned about getting enough space on GHC and latedays to run full experiements. We couldn't get our datasets copied over, so hopefully we will be able to work with course staff to resolve this.
+Resolved by Kayvon's help on 4/28.
 
+~~We are mainly concerned about getting enough space on GHC and latedays to run full experiements. We couldn't get our datasets copied over, so hopefully we will be able to work with course staff to resolve this.~~

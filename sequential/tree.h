@@ -37,6 +37,7 @@ private:
     int size;
     int left;
     int right;
+    vector<vector<vector<int>>> bin_dists;
 
 public:
     TreeNode(int node_id_, int depth_, int size_, float entropy_, int left_, int right_) :
@@ -53,8 +54,25 @@ public:
         cout << "node created with id " << node_id << endl;
     }
 
+    vector<vector<int>>& bin_dists_for_feature(int feature) {
+        return bin_dists[feature];
+    }
+
     vector<int>& get_class_dist() {
         return class_dist;
+    }
+
+    vector<vector<vector<int>>>& get_bin_dist() {
+        return bin_dists;
+    }
+
+    vector<vector<vector<int>>>& setup_bin_dist(int num_features, int num_classes, vector<int>& num_bins) {
+        bin_dists.resize(num_features);
+        for (int f = 0; f < num_features; f++) {
+            bin_dists[f].resize(num_bins[f], vector<int>(num_classes));
+        }
+
+        return bin_dists;
     }
 
     void set_class_dist(vector<int> dist) {

@@ -29,7 +29,7 @@ public:
     // potentially more hyperparams
     DecisionTree(int max_num_leaves_, int max_depth_ = MAX_DEPTH, int min_node_size_ = 0);
 
-    void train(const Dataset& d);
+    void train(Dataset& d);
 
     float test(const Dataset& d);
 

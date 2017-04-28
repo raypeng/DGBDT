@@ -143,11 +143,9 @@ SplitInfo DecisionTree::find_split(const Dataset& d, vector<int>& indices, TreeN
             best_feature = f;
         }
     }
-    /*
     cerr << "find_split outer main loop \t taking " << CycleTimer::currentSeconds() - _tt << "s" << endl;
     cerr << "find_split outer initializing bin counts \t taking " << _t << "s" << endl;
     cerr << "find_split outer finding split index \t taking " << _t2 << "s" << endl;
-    */
     // some extra stuff to check if the SplitInfo meets our requirement
     //
     float info_gain = curr_node->get_entropy() - min_entropy;
@@ -303,6 +301,8 @@ void DecisionTree::train(Dataset &d) {
         curr->left_child = new TreeNode(curr_node_id++, curr->get_depth()+1, d.num_samples, curr->split_info.left_entropy, curr->left, split_index);
         curr->right_child = new TreeNode(curr_node_id++, curr->get_depth()+1, d.num_samples, curr->split_info.right_entropy, split_index, curr->right);
 
+        double dist_start_time = CycleTimer::currentSeconds();
+
         // Update class and bin distributions
         vector<int>& left_dist = curr->left_child->get_class_dist();
         vector<int>& right_dist = curr->right_child->get_class_dist();
@@ -314,29 +314,53 @@ void DecisionTree::train(Dataset &d) {
         vector<vector<vector<int>>>& right_bin_dist = curr->right_child->setup_bin_dist(d.num_features, d.num_classes, d.num_bins);
         vector<vector<vector<int>>>& curr_bin_dist = curr->get_bin_dist();
 
-        for (int i = curr->left; i < split_index; i++) {
-            int index = indices[i];
-            int label = d.y[index];
-            left_dist[label]++;
+        int left_size = split_index - curr->left;
+        int right_size = curr->right - split_index;
 
-            // Bad cache behavior, not sure how to improve.
-            for (int f = 0; f < d.num_features; f++) {
+        vector<vector<vector<int>>>& smaller_bin_dist = right_size > left_size ? left_bin_dist : right_bin_dist;
+        vector<vector<vector<int>>>& larger_bin_dist = right_size > left_size ? right_bin_dist : left_bin_dist;
+        vector<int>& smaller_dist = right_size > left_size ? left_dist : right_dist;
+        vector<int>& larger_dist = right_size > left_size ? right_dist : left_dist;
+        int start_index;
+        int end_index;
+
+        if (right_size > left_size) {
+            start_index = curr->left;
+            end_index = split_index;
+        } else {
+            start_index = split_index;
+            end_index = curr->right;
+        }
+
+        for (int f = 0; f < d.num_features; f++) {
+            for (int i = start_index; i < end_index; i++) {
+                int index = indices[i];
+                int label = d.y[index];
+
+                if (f == 0) {
+                    smaller_dist[label]++;
+                }
+
                 int bin = d.bins[f][index];
-                left_bin_dist[f][bin][label]++;
+                smaller_bin_dist[f][bin][label]++;
             }
         }
 
 
         // Calculate right_dist by using left_dist
-        subtract_vector(right_dist, curr_dist, left_dist);
+        subtract_vector(larger_dist, curr_dist, smaller_dist);
 
         // Similarly for bin dist
         for (int f = 0; f < d.num_features; f++) {
             for (int bin = 0; bin < d.num_bins[f]; bin++) {
-                subtract_vector(right_bin_dist[f][bin], curr_bin_dist[f][bin],
-                        left_bin_dist[f][bin]);
+                subtract_vector(larger_bin_dist[f][bin], curr_bin_dist[f][bin],
+                        smaller_bin_dist[f][bin]);
             }
         }
+
+        double dist_end_time = CycleTimer::currentSeconds();
+
+        cout << "calculating children dist took " << dist_end_time - dist_start_time << "s" << endl;
 
         //cout<< "split index: " << split_index << endl;
         print(curr->left_child->node_id, "new left TreeNode added to queue, node_id:");

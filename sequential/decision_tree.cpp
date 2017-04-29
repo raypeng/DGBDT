@@ -361,9 +361,13 @@ void DecisionTree::train(Dataset &d) {
 
         // Similarly for bin dist
         for (int f = 0; f < d.num_features; f++) {
+            vector<vector<int>>& a = larger_bin_dist[f];
+            vector<vector<int>>& b = curr_bin_dist[f];
+            vector<vector<int>>& c = smaller_bin_dist[f];
+
             for (int bin = 0; bin < d.num_bins[f]; bin++) {
-                subtract_vector(larger_bin_dist[f][bin], curr_bin_dist[f][bin],
-                        smaller_bin_dist[f][bin]);
+                subtract_vector(a[bin], b[bin],
+                        c[bin]);
             }
         }
 

@@ -24,13 +24,21 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, v
     print(feature_id, "find_split_feature feature_id");
     _t -= CycleTimer::currentSeconds();
 
+    vector<vector<int>>& bin_dists = curr_node->bin_dists_for_feature(feature_id);
+
     int N = curr_node->right - curr_node->left;
     int num_bins = d.num_bins[feature_id];
     const vector<int>& bins = d.bins[feature_id];
     vector<int> bin_counts(num_bins, 0);
-    for (int i = 0; i < N; i++) {
-        int index = indices[i + curr_node->left];
-        bin_counts[bins[index]]++;
+    for (int i = 0; i < num_bins; i++) {
+        int count = 0;
+        vector<int>& dist = bin_dists[i];
+
+        for (int j = 0; j < d.num_classes; j++) {
+            count += dist[j];
+
+        }
+        bin_counts[i] = count;
     }
 
     _t += CycleTimer::currentSeconds();
@@ -56,7 +64,6 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, v
     vector<int> left_dist(d.num_classes,0);
     vector<int>& class_dist = curr_node->get_class_dist();
     const vector<float>& bin_edges = d.bin_edges[feature_id];
-    vector<vector<int>>& bin_dists = curr_node->bin_dists_for_feature(feature_id);
 
     float min_entropy = numeric_limits<float>::max();
     int total_samples_left = 0;

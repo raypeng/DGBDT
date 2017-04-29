@@ -341,6 +341,7 @@ void DecisionTree::train(Dataset &d) {
             smaller_dist[label]++;
         }
 
+#pragma omp parallel for schedule(static)
         for (int f = 0; f < d.num_features; f++) {
 
             vector<int>& bins = d.bins[f];
@@ -360,6 +361,7 @@ void DecisionTree::train(Dataset &d) {
         subtract_vector(larger_dist, curr_dist, smaller_dist);
 
         // Similarly for bin dist
+#pragma omp parallel for schedule(static)
         for (int f = 0; f < d.num_features; f++) {
             for (int bin = 0; bin < d.num_bins[f]; bin++) {
                 subtract_vector(larger_bin_dist[f][bin], curr_bin_dist[f][bin],

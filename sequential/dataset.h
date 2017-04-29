@@ -19,6 +19,12 @@ using namespace std;
 
 #define BIN_SIZE_MULTIPIER 2
 
+struct DataInfo {
+    int label;
+    int index;
+    float v;
+};
+
 struct Dataset {
     int num_features;
     int num_samples;
@@ -54,25 +60,26 @@ struct Dataset {
         {
 
 // (original index, feature value) pairs
-        vector<pair<int,float>> ft_pairs(num_samples);
+        vector<DataInfo> data_infos(num_samples);
 
 #pragma omp for schedule(static)
         for (int f = 0; f < num_features; f++) {
             vector<float>& feature_row  = x[f];
 
             for (int i = 0; i < num_samples; i++) {
-                ft_pairs[i].first = i;
-                ft_pairs[i].second = feature_row[i];
+                data_infos[i].index = i;
+                data_infos[i].label = y[i];
+                data_infos[i].v = feature_row[i];
             }
 
-            sort(ft_pairs.begin(), ft_pairs.end(), [](const pair<int, float>& a,
-                        const pair<int, float>& b) {
-                return a.second < b.second;
+            sort(data_infos.begin(), data_infos.end(), [](const DataInfo& a,
+                        const DataInfo& b) {
+                return a.v < b.v;
             });
 
             //sort(feature_row.begin(), feature_row.end());
 
-            if (ft_pairs[0].second == ft_pairs[num_samples - 1].second) {
+            if (data_infos[0].v == data_infos[num_samples - 1].v) {
                 cerr << "Constant feature, should somehow handle this" << endl;
                 exit(1);
             }
@@ -89,20 +96,22 @@ struct Dataset {
 
             while (true) {
 
-                int first_index = ft_pairs[0].first;
+                int first_index = data_infos[0].index;
                 f_bins[first_index] = 0;
                 int curr_bin = 0;
 
                 vector<int> curr_dist(num_classes);
                 curr_dist[y[first_index]]++;
 
-                float prev_v = ft_pairs[0].second;
+                float prev_v = data_infos[0].v;
                 float bin_left = prev_v;
 
                 bool failed = false;
 
                 for (int i = 1; i < feature_row.size(); i++) {
-                    float v = ft_pairs[i].second;
+                    DataInfo& data_info = data_infos[i];
+
+                    float v = data_info.v;
 
                     // Check if we need to create a new bin.
                     if (v > bin_left + bin_size) {
@@ -119,9 +128,8 @@ struct Dataset {
                         curr_bin++;
                     }
 
-                    int index = ft_pairs[i].first;
-                    f_bins[index] = curr_bin;
-                    curr_dist[y[index]]++;
+                    f_bins[data_info.index] = curr_bin;
+                    curr_dist[data_info.label]++;
                     prev_v = v;
                 }
 

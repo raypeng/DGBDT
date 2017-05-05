@@ -7,6 +7,7 @@
 #include <limits>
 #include <algorithm>
 #include <iterator>
+#include <omp.h>
 
 #include "decision_tree.h"
 #include "mypprint.hpp"
@@ -14,6 +15,7 @@
 #include "CycleTimer.h"
 
 #define INFO_GAIN_THRESHOLD 1e-3
+
 
 using namespace std;
 
@@ -242,11 +244,30 @@ void DecisionTree::train(Dataset &d) {
     vector<int>& class_dist = root->get_class_dist();
     class_dist.resize(d.num_classes,0);
 
+    double _ttt = CycleTimer::currentSeconds();
+
     vector<int> indices(d.num_samples);
+    /*
     for (int i = 0; i < d.num_samples; i++) {
-        class_dist[d.y[i]]++;
-        indices[i] = i;
+      class_dist[d.y[i]]++;
+      indices[i] = i;
     }
+    */
+#pragma omp parallel
+    {
+      vector<int> local_class_dist(d.num_classes);
+#pragma omp for schedule(static) nowait
+      for (int i = 0; i < d.num_samples; i++) {
+        local_class_dist[d.y[i]]++;
+        indices[i] = i;
+      }
+      for (int label = 0; label < d.num_classes; label++) {
+#pragma omp atomic
+	class_dist[label] += local_class_dist[label];
+      }
+    }
+
+    cout << "class_dist root " << CycleTimer::currentSeconds() - _ttt << endl;
 
     list<TreeNode*> work_queue;
     work_queue.push_back(root);
@@ -275,7 +296,7 @@ void DecisionTree::train(Dataset &d) {
             num_leaves++;
             switch (curr->split_info.split_feature_id) {
                 case PerfectSplit:
-                    cout << "perfect split already for node " << curr->node_id << endl;
+		  cout << "perfect split already for node " << curr->node_id << endl;
                     break;
                 case MaxDepth:
                     cout << "node at max depth with id " << curr->node_id << endl;
@@ -340,13 +361,30 @@ void DecisionTree::train(Dataset &d) {
         }
 
         vector<int> labels(end_index - start_index);
-
-        for (int i = start_index; i < end_index; i++) {
+	for (int i = start_index; i < end_index; i++) {
             int index = indices[i];
-            int label = d.y[index];
-            labels[i - start_index] = label;
-            smaller_dist[label]++;
-        }
+	    int label = d.y[index];
+	    labels[i - start_index] = label;
+	    smaller_dist[label]++;
+	}
+
+	/*
+#pragma omp parallel
+	    {
+	      vector<int> local_smaller_dist(d.num_classes);
+#pragma omp for schedule(static) nowait
+	      for (int i = start_index; i < end_index; i++) {
+		int index = indices[i];
+		int label = d.y[index];
+		labels[i - start_index] = label;
+		local_smaller_dist[label]++;
+	      }
+	      for (int label = 0; label < d.num_classes; label++) {
+#pragma omp atomic
+		smaller_dist[label] += local_smaller_dist[label];
+	      }
+	    }
+	*/
 
 #pragma omp parallel for schedule(static)
         for (int f = 0; f < d.num_features; f++) {

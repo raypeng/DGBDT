@@ -1,0 +1,10 @@
+MSLTR	s4: train, s5: test, max_leave_nodes: 32
+
+ray computer:
+ours:	    88s -> 32s
+sklearn:    18s
+
+alex computer (run in isolation):
+old: 105s
+new: 51s
+sklearn: 16s

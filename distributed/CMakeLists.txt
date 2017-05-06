@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 2.8)
+project(.)
+set (CMAKE_CXX_STANDARD 11)
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+include_directories(.)
+add_executable(main main.cpp decision_tree.cpp dataset.cpp)
+set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")

@@ -11,6 +11,8 @@
 #include <sstream>
 #include <fstream>
 #include <algorithm>
+#include <stdbool.h>
+#include <omp.h>
 #include "tree.h"
 #include "bindist.h"
 #include "mpi_util.h"
@@ -25,6 +27,20 @@ struct DataInfo {
     int label;
     int index;
     float v;
+};
+
+struct DistributedBin {
+    int bin;
+    bool bin_start;
+    int rank;
+    float v;
+
+    DistributedBin(int bin_, bool bin_start_, int rank_, float v_) {
+        bin = bin_;
+        bin_start = bin_start_;
+        rank = rank_;
+        v = v_;
+    }
 };
 
 struct Dataset {
@@ -43,8 +59,19 @@ struct Dataset {
     // number of bins for each feature
     vector<int> num_bins;
 
+    vector<vector<float>> bin_starts;
+
     // bin edges to act as split indices for each feature
-    vector<vector<float>> bin_edges;
+    vector<vector<float>> bin_ends;
+
+    // Possible split points, used for distributed setting when merging histograms.
+    // distributed_bins[feature][i] to access ith bin for given feature
+    vector<vector<DistributedBin>> distributed_bins;
+
+    // num bins for each feature on each node: distributed_num_bins[rank][feature]
+    vector<vector<int>> distributed_num_bins;
+
+    bool distributed;
 
     int max_bins;
 
@@ -57,7 +84,8 @@ struct Dataset {
         BinDist& bin_dist = root->setup_bin_dist(num_features, max_bins_, num_classes);
 
         bins.resize(num_features);
-        bin_edges.resize(num_features);
+        bin_starts.resize(num_features);
+        bin_ends.resize(num_features);
         num_bins.resize(num_features);
 
 #pragma omp parallel
@@ -89,23 +117,24 @@ struct Dataset {
             }
 
             vector<int>& f_bins = bins[f];
-            vector<float>& f_bin_edges = bin_edges[f];
+            vector<float>& f_bin_ends = bin_ends[f];
+            vector<float>& f_bin_starts = bin_starts[f];
 
             f_bins.resize(num_samples);
-            f_bin_edges.resize(max_bins);
+            f_bin_ends.resize(max_bins);
+            f_bin_starts.resize(max_bins);
 
             float bin_size = START_BIN_SIZE;
 
             while (true) {
 
+                int curr_bin = 0;
+                float bin_left = data_infos[0].v;
+                f_bin_starts[curr_bin] = bin_left;
+
                 int first_index = data_infos[0].index;
                 f_bins[first_index] = 0;
-                int curr_bin = 0;
-
                 bin_dist.inc(f, curr_bin, y[first_index]);
-
-                float prev_v = data_infos[0].v;
-                float bin_left = prev_v;
 
                 bool failed = false;
 
@@ -122,33 +151,61 @@ struct Dataset {
                             break;
                         }
 
-                        f_bin_edges[curr_bin] = prev_v;
+                        f_bin_ends[curr_bin] = bin_left + bin_size;
                         bin_left = v;
                         curr_bin++;
+                        f_bin_starts[curr_bin] = bin_left;
                     }
 
                     f_bins[data_info.index] = curr_bin;
                     bin_dist.inc(f, curr_bin, data_info.label);
-                    prev_v = v;
                 }
 
                 if (failed) {
                     bin_dist.reset(f);
                     bin_size *= BIN_SIZE_MULTIPIER;
                 } else {
-                    f_bin_edges[curr_bin] = prev_v;
+                    f_bin_ends[curr_bin] = bin_left + bin_size;
 
                     int n = curr_bin + 1;
                     num_bins[f] = n;
-                    f_bin_edges.resize(n);
+                    f_bin_ends.resize(n);
+                    f_bin_starts.resize(n);
 
                     break;
                 }
             }
         }
+    }
 
+    if (distributed) {
+        if (mpi_rank() == 0) {
+
+            distributed_num_bins.resize(mpi_world_size(), vector<int>(num_features));
+            distributed_num_bins[0] = num_bins;
+
+            distributed_bins.resize(num_features);
+
+            for (int f = 0; f < num_features; f++) {
+                vector<DistributedBin>& bins = distributed_bins[f];
+                int nbins = distributed_num_bins[mpi_rank()][f];
+
+                for (int i = 0; i < nbins; i++) {
+                    bins.push_back(DistributedBin(i, true, 0, bin_starts[f][i]));
+                    bins.push_back(DistributedBin(i, false, 0, bin_ends[f][i]));
+                }
+            }
+
+            // TODO: actually construct distributed bins from all nodes and sort it
+
+        } else {
+            // TODO: send to rank 0
+
+        }
     }
     }
+
+
 };
 
 class DatasetParser {
@@ -156,6 +213,7 @@ private:
     map<string, int> label_map;
 public:
     Dataset parse_tsv(string file_path, int num_features, int num_classes);
+    Dataset distributed_parse_tsv(string file_path, int num_features, int num_classes);
 };
 
 #endif //SEQUENTIAL_DATASET_H

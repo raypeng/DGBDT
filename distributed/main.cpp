@@ -20,15 +20,20 @@ int main(int argc, char** argv) {
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &nproc);
-    init_mpi_util(rank, nproc);
+
+    // Slight hack, hardcode the total samples of the dataset.
+    // TODO: Actually chunk the file. For now, each node reads the whole dataset
+    // operates on an assigned interval of that dataset
+    int total_samples = 2270296;
+    //int total_samples = 723411;
+    init_mpi_util(rank, nproc, total_samples);
 
     DatasetParser dp;
 
-    // TODO: Actually chunk the file. For now, each node reads the whole dataset
-    // operates on an assigned interval of that dataset
-
     //Dataset d = dp.parse_tsv("../dataset/123.tab.txt", 136, 5);
-    Dataset d = dp.parse_tsv("../dataset/mslr30k.s123.tab.txt", 136, 5);
+    Dataset d = dp.distributed_parse_tsv("../dataset/123.tab.txt", 136, 5);
+    //Dataset d = dp.distributed_parse_tsv("../dataset/mslr30k.s123.tab.txt", 136, 5);
+    //Dataset d = dp.parse_tsv("../dataset/mslr30k.s123.tab.txt", 136, 5);
 
     // Dataset d = dp.parse_tsv("../dataset/iris.data.tab.txt", 4, 3);
     // Dataset d = dp.parse_tsv("../dataset/wiki.txt", 3, 2);
@@ -56,7 +61,8 @@ int main(int argc, char** argv) {
     //cout << "test on sample 0, predicted label: " << dt.test_single_sample(d, 0) << endl;
     mpi_print("test on training set, accuracy: ", dt.test(d));
 
-    Dataset t = dp.parse_tsv("../dataset/mslr30k.s5.tab.txt", 136, 5);
+    //Dataset t = dp.parse_tsv("../dataset/mslr30k.s5.tab.txt", 136, 5);
+    Dataset t = dp.parse_tsv("../dataset/5.tab.txt", 136, 5);
     mpi_print("test on test set, accuracy: ", dt.test(t));
 
     MPI_Finalize();

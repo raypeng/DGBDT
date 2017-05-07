@@ -17,7 +17,6 @@ struct SplitInfo {
     int split_feature_id; // going to be NodeStatus if < 0
     float min_entropy;
     float split_threshold;
-    int split_bin;
     float left_entropy;
     float right_entropy;
 };

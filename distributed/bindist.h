@@ -10,6 +10,8 @@ class BinDist {
     public:
         BinDist();
 
+        BinDist(int num_features, int num_bins, int num_classes);
+
         void setup(int num_features, int num_bins, int num_classes);
 
         void reset(int f);
@@ -17,6 +19,8 @@ class BinDist {
         void sum(BinDist& a, BinDist& b);
 
         void diff(BinDist& a, BinDist& b);
+
+        int size();
 
         int get(int f, int b, int c);
 

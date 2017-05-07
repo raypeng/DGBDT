@@ -23,4 +23,10 @@ void add_vector(vector<int>& a, const vector<int>& b, int* c) {
     }
 }
 
+bool float_equal(const float& a, const float& b) {
+    float diff = a - b;
+
+    return -1e-10 < diff && diff < 1e-10;
+}
+
 #endif

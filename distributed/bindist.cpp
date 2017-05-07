@@ -33,7 +33,7 @@ void BinDist::sum(BinDist& a, BinDist& b) {
     int* ahead = a.head(0);
     int* bhead = b.head(0);
 
-//#pragma omp for schedule(static)
+#pragma omp for schedule(static)
     for (int i = 0; i <  num_features * num_bins * num_classes; i++) {
         this_head[i] = ahead[i] + bhead[i];
     }
@@ -45,7 +45,7 @@ void BinDist::diff(BinDist& a, BinDist& b) {
     int* ahead = a.head(0);
     int* bhead = b.head(0);
 
-//#pragma omp for schedule(static)
+#pragma omp for schedule(static)
     for (int i = 0; i < num_features * num_bins * num_classes; i++) {
         this_head[i] = ahead[i] - bhead[i];
     }

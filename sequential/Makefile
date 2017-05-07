@@ -28,4 +28,4 @@ decision_tree2.o: decision_tree.cpp decision_tree.h mypprint.hpp
 	g++ $(CXXFLAGS) -fopenmp -c decision_tree.cpp -o decision_tree2.o
 
 clean:
-	rm -f $(OBJS) $(OBJS2) main *~
+	rm -f $(OBJS) $(OBJS2) main openmp *~

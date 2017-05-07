@@ -13,6 +13,7 @@
 #include <algorithm>
 #include "tree.h"
 #include "bindist.h"
+#include "mpi_util.h"
 
 using namespace std;
 
@@ -53,7 +54,7 @@ struct Dataset {
     void build_bins(int max_bins_, TreeNode* root) {
         max_bins = max_bins_;
 
-        BinDist& bin_dist = root->setup_bin_dist(num_features, max_bins, num_classes);
+        BinDist& bin_dist = root->setup_bin_dist(num_features, max_bins_, num_classes);
 
         bins.resize(num_features);
         bin_edges.resize(num_features);
@@ -89,7 +90,6 @@ struct Dataset {
 
             vector<int>& f_bins = bins[f];
             vector<float>& f_bin_edges = bin_edges[f];
-            int** dists = bin_dist[f];
 
             f_bins.resize(num_samples);
             f_bin_edges.resize(max_bins);
@@ -102,7 +102,7 @@ struct Dataset {
                 f_bins[first_index] = 0;
                 int curr_bin = 0;
 
-                dists[curr_bin][y[first_index]]++;
+                bin_dist.inc(f, curr_bin, y[first_index]);
 
                 float prev_v = data_infos[0].v;
                 float bin_left = prev_v;
@@ -128,7 +128,7 @@ struct Dataset {
                     }
 
                     f_bins[data_info.index] = curr_bin;
-                    dists[curr_bin][data_info.label]++;
+                    bin_dist.inc(f, curr_bin, data_info.label);
                     prev_v = v;
                 }
 

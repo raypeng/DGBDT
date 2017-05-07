@@ -24,7 +24,8 @@ int main(int argc, char** argv) {
 
     DatasetParser dp;
 
-    Dataset d = dp.parse_tsv("../dataset/mslr30k.s123.tab.txt", 136, 5);
+    Dataset d = dp.parse_tsv("../dataset/123.tab.txt", 136, 5);
+    //Dataset d = dp.parse_tsv("../dataset/mslr30k.s123.tab.txt", 136, 5);
 
     // Dataset d = dp.parse_tsv("../dataset/iris.data.tab.txt", 4, 3);
     // Dataset d = dp.parse_tsv("../dataset/wiki.txt", 3, 2);
@@ -52,7 +53,7 @@ int main(int argc, char** argv) {
     //cout << "test on sample 0, predicted label: " << dt.test_single_sample(d, 0) << endl;
     mpi_print("test on training set, accuracy: ", dt.test(d));
 
-    Dataset t = dp.parse_tsv("../dataset/mslr30k.s5.tab.txt", 136, 5);
+    Dataset t = dp.parse_tsv("../dataset/5.tab.txt", 136, 5);
     mpi_print("test on test set, accuracy: ", dt.test(t));
 
     MPI_Finalize();

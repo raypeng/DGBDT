@@ -10,30 +10,28 @@ void BinDist::setup(int num_features_, int num_bins_, int num_classes_) {
     num_bins = num_bins_;
     num_classes = num_classes_;
 
-    data = new int**[num_features];
-
-    for (int i = 0; i < num_features; i++) {
-        data[i] = new int*[num_bins]();
-        for (int j = 0; j < num_classes; num_classes++) {
-            data[i][j] = new int[num_classes]();
-        }
-    }
+    data = new int[num_features * num_bins * num_classes]();
 }
 
+
 void BinDist::reset(int f) {
-    int *dist = *(data[f]);
+    int *dist = head(f);
     std::fill(dist, dist + num_bins * num_classes, 0);
 }
 
-int* BinDist::head() {
-    return data[0][0];
+int* BinDist::head(int f) {
+    return &(data[f * num_features]);;
+}
+
+int* BinDist::head(int f, int b) {
+    return &(data[f * num_features + b * num_bins]);;
 }
 
 void BinDist::sum(BinDist& a, BinDist& b) {
 
-    int* this_head = head();
-    int* ahead = a.head();
-    int* bhead = b.head();
+    int* this_head = head(0);
+    int* ahead = a.head(0);
+    int* bhead = b.head(0);
 
 //#pragma omp for schedule(static)
     for (int i = 0; i <  num_features * num_bins * num_classes; i++) {
@@ -43,9 +41,9 @@ void BinDist::sum(BinDist& a, BinDist& b) {
 
 void BinDist::diff(BinDist& a, BinDist& b) {
 
-    int* this_head = head();
-    int* ahead = a.head();
-    int* bhead = b.head();
+    int* this_head = head(0);
+    int* ahead = a.head(0);
+    int* bhead = b.head(0);
 
 //#pragma omp for schedule(static)
     for (int i = 0; i < num_features * num_bins * num_classes; i++) {
@@ -53,13 +51,14 @@ void BinDist::diff(BinDist& a, BinDist& b) {
     }
 }
 
-BinDist::~BinDist() {
+int BinDist::get(int f, int b, int c) {
+    return data[f * num_features + b * num_bins + c];
+}
 
-    for (int i = 0; i < num_features; i++) {
-        for (int j = 0; j < num_bins; j++) {
-            delete[] data[i][j];
-        }
-        delete data[i];
-    }
+void BinDist::inc(int f, int b, int c, int delta) {
+    data[f * num_features + b * num_bins + c] += delta;
+}
+
+BinDist::~BinDist() {
     delete[] data;
 }

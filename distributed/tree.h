@@ -63,7 +63,7 @@ public:
         return bin_dists;
     }
 
-    BinDist& setup_bin_dist(int num_features, int num_classes, int num_bins) {
+    BinDist& setup_bin_dist(int num_features, int num_bins, int num_classes) {
         bin_dists.setup(num_features, num_bins, num_classes);
         return bin_dists;
     }

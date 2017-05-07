@@ -3,7 +3,7 @@
 
 class BinDist {
     private:
-        int ***data;
+        int *data;
         int num_features;
         int num_bins;
         int num_classes;
@@ -18,11 +18,13 @@ class BinDist {
 
         void diff(BinDist& a, BinDist& b);
 
-        int* head();
+        int get(int f, int b, int c);
 
-        int** operator [](int i) const {return data[i];}
+        void inc(int f, int b, int c, int delta = 1);
 
-        int** & operator [](int i) {return data[i];}
+        int* head(int f);
+
+        int* head(int f, int b);
 
         ~BinDist();
 };

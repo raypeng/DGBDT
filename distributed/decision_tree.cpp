@@ -25,7 +25,7 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, v
     // equivalent to taking entropy before split as zero
     _t -= CycleTimer::currentSeconds();
 
-    int** bin_dists = curr_node->get_bin_dist()[feature_id];
+    BinDist bin_dist = curr_node->get_bin_dist();
 
     int N = curr_node->right - curr_node->left;
     int num_bins = d.num_bins[feature_id];
@@ -33,10 +33,9 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, v
     vector<int> bin_counts(num_bins, 0);
     for (int i = 0; i < num_bins; i++) {
         int count = 0;
-        int* dist = bin_dists[i];
 
         for (int j = 0; j < d.num_classes; j++) {
-            count += dist[j];
+            count += bin_dist.get(feature_id, i, j);
         }
         bin_counts[i] = count;
     }
@@ -77,7 +76,7 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, v
             break;
         }
 
-        add_vector(left_dist, left_dist, bin_dists[split_index]);
+        add_vector(left_dist, left_dist, bin_dist.head(feature_id, split_index));
 
         total_samples_left += bin_counts[split_index];
         int total_samples_right = N - total_samples_left;
@@ -314,8 +313,10 @@ void DecisionTree::train(Dataset &d) {
         cout << "split on bin: " << curr->split_info.split_bin << endl;
         */
 
+        mpi_print("splitting data");
         // split data into two halves
         int split_index = split_data(indices, d, curr);
+        mpi_print("making children");
         // create two child nodes and add to work queue
         // TODO: make the size of the node actually real after partitioning is implemented
         curr->left_child = new TreeNode(curr_node_id++, curr->get_depth()+1, d.num_samples, curr->split_info.left_entropy, curr->left, split_index);
@@ -330,8 +331,8 @@ void DecisionTree::train(Dataset &d) {
         left_dist.resize(d.num_classes, 0);
         right_dist.resize(d.num_classes, 0);
 
-        BinDist& left_bin_dist = curr->left_child->setup_bin_dist(d.num_features, d.num_classes, d.max_bins);
-        BinDist& right_bin_dist = curr->right_child->setup_bin_dist(d.num_features, d.num_classes, d.max_bins);
+        BinDist& left_bin_dist = curr->left_child->setup_bin_dist(d.num_features, d.max_bins, d.num_classes);
+        BinDist& right_bin_dist = curr->right_child->setup_bin_dist(d.num_features, d.max_bins, d.num_classes);
         BinDist& curr_bin_dist = curr->get_bin_dist();
 
         int left_size = split_index - curr->left;
@@ -378,18 +379,18 @@ void DecisionTree::train(Dataset &d) {
 	    }
 	*/
 
+        mpi_print("entering small bin dist calculation");
 #pragma omp parallel for schedule(static)
         for (int f = 0; f < d.num_features; f++) {
 
             vector<int>& bins = d.bins[f];
-            int** bin_dists = smaller_bin_dist[f];
 
             for (int i = start_index; i < end_index; i++) {
                 int index = indices[i];
                 int label = labels[i - start_index];
 
                 int bin = bins[index];
-                bin_dists[bin][label]++;
+                smaller_bin_dist.inc(f,bin,label);
             }
         }
 
@@ -397,6 +398,7 @@ void DecisionTree::train(Dataset &d) {
         // Calculate right_dist by using left_dist
         subtract_vector(larger_dist, curr_dist, smaller_dist);
 
+        mpi_print("entering large bin dist calculation");
         // Similarly for bin dist
         larger_bin_dist.diff(curr_bin_dist, smaller_bin_dist);
 

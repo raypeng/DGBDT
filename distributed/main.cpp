@@ -22,7 +22,6 @@ int main(int argc, char** argv) {
     MPI_Comm_size(MPI_COMM_WORLD, &nproc);
     init_mpi_util(rank, nproc);
 
-    /*
     DatasetParser dp;
 
     Dataset d = dp.parse_tsv("../dataset/mslr30k.s123.tab.txt", 136, 5);
@@ -44,33 +43,17 @@ int main(int argc, char** argv) {
     cout << "bin dists: " << d.bin_dists << endl;
     */
 
-    //DecisionTree dt = DecisionTree(255);
-    /*
-    cout << "training started" << endl;
+    DecisionTree dt = DecisionTree(255);
+    mpi_print("training started");
     double _t = CycleTimer::currentSeconds();
     dt.train(d);
-    cout << "training done" << endl;
-    cout << "training has taken " << (CycleTimer::currentSeconds() - _t) << "s" << " rank: " << rank <<  endl;
+    mpi_print("training done");
+    mpi_print("training has taken: ", CycleTimer::currentSeconds() - _t);
     //cout << "test on sample 0, predicted label: " << dt.test_single_sample(d, 0) << endl;
-    cout << "test on training set, accuracy: " << dt.test(d) << endl;
+    mpi_print("test on training set, accuracy: ", dt.test(d));
 
     Dataset t = dp.parse_tsv("../dataset/mslr30k.s5.tab.txt", 136, 5);
-    cout << "test on test set, accuracy: " << dt.test(t) << endl;
-    */
-
-    mpi_print("hello world!");
-
-    int number;
-
-    if (mpi_rank() == 0) {
-        number = -1;
-        MPI_Send(&number, 1, MPI_INT, 1, 0, MPI_COMM_WORLD);
-    } else if (mpi_rank() == 1) {
-        MPI_Recv(&number, 1, MPI_INT, 0, 0, MPI_COMM_WORLD,
-                MPI_STATUS_IGNORE);
-        mpi_print("Process 1 received number:", number);
-
-    }
+    mpi_print("test on test set, accuracy: ", dt.test(t));
 
     MPI_Finalize();
 }

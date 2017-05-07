@@ -25,7 +25,7 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, v
     // equivalent to taking entropy before split as zero
     _t -= CycleTimer::currentSeconds();
 
-    vector<vector<int>>& bin_dists = curr_node->bin_dists_for_feature(feature_id);
+    int** bin_dists = curr_node->get_bin_dist()[feature_id];
 
     int N = curr_node->right - curr_node->left;
     int num_bins = d.num_bins[feature_id];
@@ -33,11 +33,10 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, v
     vector<int> bin_counts(num_bins, 0);
     for (int i = 0; i < num_bins; i++) {
         int count = 0;
-        vector<int>& dist = bin_dists[i];
+        int* dist = bin_dists[i];
 
         for (int j = 0; j < d.num_classes; j++) {
             count += dist[j];
-
         }
         bin_counts[i] = count;
     }
@@ -149,9 +148,11 @@ SplitInfo DecisionTree::find_split(const Dataset& d, vector<int>& indices, TreeN
             best_feature = f;
         }
     }
+    /*
     cerr << "find_split outer main loop \t taking " << CycleTimer::currentSeconds() - _tt << "s" << endl;
     cerr << "find_split outer initializing bin counts \t taking " << _t << "s" << endl;
     cerr << "find_split outer finding split index \t taking " << _t2 << "s" << endl;
+    */
     // some extra stuff to check if the SplitInfo meets our requirement
     //
     float info_gain = curr_node->get_entropy() - min_entropy;
@@ -228,14 +229,14 @@ void DecisionTree::train(Dataset &d) {
     float dummy_large_entropy = 1e3; // hack! coz we always split when we start anyways
     root = new TreeNode(curr_node_id++, 0, d.num_samples, dummy_large_entropy, 0, d.num_samples);
 
-    cout << "starting building bins" << endl;
+    mpi_print("starting building bins");
     float bin_start = CycleTimer::currentSeconds();
 
     d.build_bins(255, root);
 
     float bin_end = CycleTimer::currentSeconds();
     float bin_time = bin_end - bin_start;
-    cout << "building bins took: " << bin_time << " seconds" << endl;
+    mpi_print("building bins took: ", bin_time);
 
     vector<int>& class_dist = root->get_class_dist();
     class_dist.resize(d.num_classes,0);
@@ -258,7 +259,7 @@ void DecisionTree::train(Dataset &d) {
       }
     }
 
-    cout << "class_dist root " << CycleTimer::currentSeconds() - _ttt << endl;
+    mpi_print("class_dist root ", CycleTimer::currentSeconds() - _ttt);
 
     list<TreeNode*> work_queue;
     work_queue.push_back(root);
@@ -276,7 +277,7 @@ void DecisionTree::train(Dataset &d) {
 
         // find split according to the data in curr
         print(curr->node_id, "working on splitting node id");
-        cout << "working on splitting node id: " << curr->node_id << endl;
+        mpi_print("working on splitting node id: ", curr->node_id);
         _t = CycleTimer::currentSeconds();
         curr->split_info = find_split(d, indices, curr);
         /*
@@ -329,15 +330,15 @@ void DecisionTree::train(Dataset &d) {
         left_dist.resize(d.num_classes, 0);
         right_dist.resize(d.num_classes, 0);
 
-        vector<vector<vector<int>>>& left_bin_dist = curr->left_child->setup_bin_dist(d.num_features, d.num_classes, d.num_bins);
-        vector<vector<vector<int>>>& right_bin_dist = curr->right_child->setup_bin_dist(d.num_features, d.num_classes, d.num_bins);
-        vector<vector<vector<int>>>& curr_bin_dist = curr->get_bin_dist();
+        BinDist& left_bin_dist = curr->left_child->setup_bin_dist(d.num_features, d.num_classes, d.max_bins);
+        BinDist& right_bin_dist = curr->right_child->setup_bin_dist(d.num_features, d.num_classes, d.max_bins);
+        BinDist& curr_bin_dist = curr->get_bin_dist();
 
         int left_size = split_index - curr->left;
         int right_size = curr->right - split_index;
 
-        vector<vector<vector<int>>>& smaller_bin_dist = right_size > left_size ? left_bin_dist : right_bin_dist;
-        vector<vector<vector<int>>>& larger_bin_dist = right_size > left_size ? right_bin_dist : left_bin_dist;
+        BinDist& smaller_bin_dist = right_size > left_size ? left_bin_dist : right_bin_dist;
+        BinDist& larger_bin_dist = right_size > left_size ? right_bin_dist : left_bin_dist;
         vector<int>& smaller_dist = right_size > left_size ? left_dist : right_dist;
         vector<int>& larger_dist = right_size > left_size ? right_dist : left_dist;
         int start_index;
@@ -352,12 +353,12 @@ void DecisionTree::train(Dataset &d) {
         }
 
         vector<int> labels(end_index - start_index);
-	for (int i = start_index; i < end_index; i++) {
+        for (int i = start_index; i < end_index; i++) {
             int index = indices[i];
-	    int label = d.y[index];
-	    labels[i - start_index] = label;
-	    smaller_dist[label]++;
-	}
+            int label = d.y[index];
+            labels[i - start_index] = label;
+            smaller_dist[label]++;
+        }
 
 	/*
 #pragma omp parallel
@@ -381,7 +382,7 @@ void DecisionTree::train(Dataset &d) {
         for (int f = 0; f < d.num_features; f++) {
 
             vector<int>& bins = d.bins[f];
-            vector<vector<int>>& bin_dists = smaller_bin_dist[f];
+            int** bin_dists = smaller_bin_dist[f];
 
             for (int i = start_index; i < end_index; i++) {
                 int index = indices[i];
@@ -397,21 +398,11 @@ void DecisionTree::train(Dataset &d) {
         subtract_vector(larger_dist, curr_dist, smaller_dist);
 
         // Similarly for bin dist
-#pragma omp parallel for schedule(static)
-        for (int f = 0; f < d.num_features; f++) {
-            vector<vector<int>>& a = larger_bin_dist[f];
-            vector<vector<int>>& b = curr_bin_dist[f];
-            vector<vector<int>>& c = smaller_bin_dist[f];
-
-            for (int bin = 0; bin < d.num_bins[f]; bin++) {
-                subtract_vector(a[bin], b[bin],
-                        c[bin]);
-            }
-        }
+        larger_bin_dist.diff(curr_bin_dist, smaller_bin_dist);
 
         double dist_end_time = CycleTimer::currentSeconds();
 
-        cout << "calculating children dist took " << dist_end_time - dist_start_time << "s" << endl;
+        mpi_print("calculating children dist took ", dist_end_time - dist_start_time);
 
         //cout<< "split index: " << split_index << endl;
         // cout<< "left size: " << curr->left_child->right - curr->left_child->left << endl;
@@ -423,7 +414,7 @@ void DecisionTree::train(Dataset &d) {
         left_over_node->update_majority_label();
     }
 
-    cout << "building bins took: " << bin_time << " seconds" << endl;
+    mpi_print("building bins took: ", bin_time);
 }
 
 int DecisionTree::test_single_sample(const Dataset& d, int sample_id) {

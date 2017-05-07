@@ -25,7 +25,7 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, v
     // equivalent to taking entropy before split as zero
     _t -= CycleTimer::currentSeconds();
 
-    BinDist bin_dist = curr_node->get_bin_dist();
+    BinDist& bin_dist = curr_node->get_bin_dist();
 
     int N = curr_node->right - curr_node->left;
     int num_bins = d.num_bins[feature_id];

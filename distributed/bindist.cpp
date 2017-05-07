@@ -20,11 +20,11 @@ void BinDist::reset(int f) {
 }
 
 int* BinDist::head(int f) {
-    return &(data[f * num_features]);;
+    return &(data[f * num_bins * num_classes]);;
 }
 
 int* BinDist::head(int f, int b) {
-    return &(data[f * num_features + b * num_bins]);;
+    return &(data[f * num_bins * num_classes + b * num_classes]);;
 }
 
 void BinDist::sum(BinDist& a, BinDist& b) {
@@ -52,11 +52,11 @@ void BinDist::diff(BinDist& a, BinDist& b) {
 }
 
 int BinDist::get(int f, int b, int c) {
-    return data[f * num_features + b * num_bins + c];
+    return data[f * num_bins * num_classes + b * num_classes + c];
 }
 
 void BinDist::inc(int f, int b, int c, int delta) {
-    data[f * num_features + b * num_bins + c] += delta;
+    data[f * num_bins * num_classes + b * num_classes + c] += delta;
 }
 
 BinDist::~BinDist() {

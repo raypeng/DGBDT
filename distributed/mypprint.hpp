@@ -25,6 +25,7 @@
 
 namespace std {
 
+
     template <class T>
     void print(T val, string prefix="") {
 #ifdef debug

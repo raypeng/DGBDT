@@ -12,6 +12,8 @@
 #include <fstream>
 #include <algorithm>
 #include "tree.h"
+#include "bindist.h"
+#include "mpi_util.h"
 
 using namespace std;
 
@@ -44,16 +46,18 @@ struct Dataset {
     // bin edges to act as split indices for each feature
     vector<vector<float>> bin_edges;
 
+    int max_bins;
+
     // WARNING: calling this will render x to be unusable.
     //
     // Use bins as a discretized dataset after calling this.
-    void build_bins(int max_bins, TreeNode* root) {
+    void build_bins(int max_bins_, TreeNode* root) {
+        max_bins = max_bins_;
 
-        vector<vector<vector<int>>>& bin_dists = root->get_bin_dist();
+        BinDist& bin_dist = root->setup_bin_dist(num_features, max_bins_, num_classes);
 
         bins.resize(num_features);
         bin_edges.resize(num_features);
-        bin_dists.resize(num_features);
         num_bins.resize(num_features);
 
 #pragma omp parallel
@@ -86,11 +90,9 @@ struct Dataset {
 
             vector<int>& f_bins = bins[f];
             vector<float>& f_bin_edges = bin_edges[f];
-            vector<vector<int>>& dists = bin_dists[f];
 
             f_bins.resize(num_samples);
             f_bin_edges.resize(max_bins);
-            dists.resize(max_bins);
 
             float bin_size = START_BIN_SIZE;
 
@@ -100,8 +102,7 @@ struct Dataset {
                 f_bins[first_index] = 0;
                 int curr_bin = 0;
 
-                vector<int> curr_dist(num_classes);
-                curr_dist[y[first_index]]++;
+                bin_dist.inc(f, curr_bin, y[first_index]);
 
                 float prev_v = data_infos[0].v;
                 float bin_left = prev_v;
@@ -122,22 +123,20 @@ struct Dataset {
                         }
 
                         f_bin_edges[curr_bin] = prev_v;
-                        dists[curr_bin] = curr_dist;
-                        fill(curr_dist.begin(), curr_dist.end(), 0);
                         bin_left = v;
                         curr_bin++;
                     }
 
                     f_bins[data_info.index] = curr_bin;
-                    curr_dist[data_info.label]++;
+                    bin_dist.inc(f, curr_bin, data_info.label);
                     prev_v = v;
                 }
 
                 if (failed) {
+                    bin_dist.reset(f);
                     bin_size *= BIN_SIZE_MULTIPIER;
                 } else {
                     f_bin_edges[curr_bin] = prev_v;
-                    dists[curr_bin] = curr_dist;
 
                     int n = curr_bin + 1;
                     num_bins[f] = n;

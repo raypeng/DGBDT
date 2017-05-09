@@ -1,0 +1,19 @@
+#!/bin/sh
+# Get command line arguments.
+NODES=$1
+# Calculate host list.
+#HOSTS=`cat $PBS_NODEFILE | sort | uniq | awk -v ppn=$NODES '{for(i=0; i<ppn; i++) { print $0; }}' | paste -d, -s`
+#echo $0
+#echo $HOSTS
+# Calculate number of processors.
+#NP=$(( NODES * PROCESSORS_PER_NODE ))
+# Program to run with MPI.
+PROGRAM_NAME="./main"
+# Submit the job.  No need to modify this.
+cd $PBS_O_WORKDIR
+#source /opt/torque/etc/openmpi-setup.sh
+
+NODES=`sort -u $PBS_NODEFILE`
+echo $NODES
+
+mpirun -pernode -hostfile $PBS_NODEFILE $PROGRAM_NAME

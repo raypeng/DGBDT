@@ -5,6 +5,7 @@
 #include "dataset.h"
 #include "decision_tree.h"
 #include "mypprint.hpp"
+#include "CycleTimer.h"
 
 using namespace std;
 
@@ -12,7 +13,7 @@ int main() {
 
     DatasetParser dp;
 
-    Dataset d = dp.parse_tsv("../dataset/big/mslr10k.s4.tab.txt", 136, 5);
+    Dataset d = dp.parse_tsv("/tmp/mslr30k.s123.tab.txt", 136, 5);
 
     // Dataset d = dp.parse_tsv("../dataset/iris.data.tab.txt", 4, 3);
     // Dataset d = dp.parse_tsv("../dataset/wiki.txt", 3, 2);
@@ -23,14 +24,22 @@ int main() {
     // cout << "d.y " << d.y << endl;
     // cout << "d.x[0]" << d.x[0] << endl;
 
-    DecisionTree dt = DecisionTree(32);
+    /*
+    cout << "bins: " << d.bins << endl;
+    cout << "num bins: " << d.num_bins << endl;
+    cout << "bin edges: " << d.bin_edges << endl;
+    cout << "bin dists: " << d.bin_dists << endl;
+    */
+
+    DecisionTree dt = DecisionTree(255);
     cout << "training started" << endl;
+    double _t = CycleTimer::currentSeconds();
     dt.train(d);
     cout << "training done" << endl;
-    cout << "test on sample 0, predicted label:" << dt.test_single_sample(d, 0) << endl;
-    cout << "test on training set, accuracy:" << dt.test(d) << endl;
+    cout << "training has taken " << (CycleTimer::currentSeconds() - _t) << "s" << endl;
+    cout << "test on sample 0, predicted label: " << dt.test_single_sample(d, 0) << endl;
+    cout << "test on training set, accuracy: " << dt.test(d) << endl;
 
-    Dataset t = dp.parse_tsv("../dataset/big/mslr10k.s5.tab.txt", 136, 5);
-    cout << "test on test set, accuracy:" << dt.test(t) << endl;
-
+    Dataset t = dp.parse_tsv("/tmp/mslr30k.s5.tab.txt", 136, 5);
+    cout << "test on test set, accuracy: " << dt.test(t) << endl;
 }

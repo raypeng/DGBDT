@@ -13,9 +13,11 @@
 #include <algorithm>
 #include <stdbool.h>
 #include <omp.h>
+#include <mpi.h>
 #include "tree.h"
 #include "bindist.h"
 #include "mpi_util.h"
+#include "util.h"
 
 using namespace std;
 
@@ -42,6 +44,10 @@ struct DistributedBin {
         v = v_;
     }
 };
+
+bool cmp_bin(const DistributedBin& a, const DistributedBin& b);
+
+ostream& operator<<(ostream& os, const DistributedBin& b);
 
 struct Dataset {
     int num_features;
@@ -70,6 +76,8 @@ struct Dataset {
 
     // num bins for each feature on each node: distributed_num_bins[rank][feature]
     vector<vector<int>> distributed_num_bins;
+
+    vector<BinDist*> distributed_bin_dist;
 
     bool distributed;
 
@@ -130,6 +138,7 @@ struct Dataset {
 
                 int curr_bin = 0;
                 float bin_left = data_infos[0].v;
+                float prev_v = bin_left;
                 f_bin_starts[curr_bin] = bin_left;
 
                 int first_index = data_infos[0].index;
@@ -151,7 +160,7 @@ struct Dataset {
                             break;
                         }
 
-                        f_bin_ends[curr_bin] = bin_left + bin_size;
+                        f_bin_ends[curr_bin] = prev_v;
                         bin_left = v;
                         curr_bin++;
                         f_bin_starts[curr_bin] = bin_left;
@@ -159,13 +168,14 @@ struct Dataset {
 
                     f_bins[data_info.index] = curr_bin;
                     bin_dist.inc(f, curr_bin, data_info.label);
+                    prev_v = v;
                 }
 
                 if (failed) {
                     bin_dist.reset(f);
                     bin_size *= BIN_SIZE_MULTIPIER;
                 } else {
-                    f_bin_ends[curr_bin] = bin_left + bin_size;
+                    f_bin_ends[curr_bin] = prev_v;
 
                     int n = curr_bin + 1;
                     num_bins[f] = n;
@@ -176,36 +186,74 @@ struct Dataset {
                 }
             }
         }
-    }
+        }
 
-    if (distributed) {
-        if (mpi_rank() == 0) {
+        mpi_print("entering distributed part");
+        if (distributed) {
 
-            distributed_num_bins.resize(mpi_world_size(), vector<int>(num_features));
-            distributed_num_bins[0] = num_bins;
+            int num_bin_tag = 0;
+            int bin_start_tag = 1;
+            int bin_end_tag = 2;
 
-            distributed_bins.resize(num_features);
 
-            for (int f = 0; f < num_features; f++) {
-                vector<DistributedBin>& bins = distributed_bins[f];
-                int nbins = distributed_num_bins[mpi_rank()][f];
+            distributed_bin_dist.resize(mpi_world_size());
+            if (mpi_rank() == 0) {
+                // Set root's distributed bin dist locally from the node.
+                for (int i = 1; i < mpi_world_size(); i++) {
+                    distributed_bin_dist[i] = new BinDist(num_features, max_bins, num_classes);
+                }
 
-                for (int i = 0; i < nbins; i++) {
-                    bins.push_back(DistributedBin(i, true, 0, bin_starts[f][i]));
-                    bins.push_back(DistributedBin(i, false, 0, bin_ends[f][i]));
+                distributed_num_bins.resize(mpi_world_size(), vector<int>(num_features));
+                distributed_num_bins[0] = num_bins;
+
+                for (int r = 1; r < mpi_world_size(); r++) {
+                    MPI_Recv(distributed_num_bins[r].data(), num_features, MPI_INT, r, num_bin_tag,
+                            MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                }
+
+                distributed_bins.resize(num_features);
+
+                for (int f = 0; f < num_features; f++) {
+                    vector<DistributedBin>& bins = distributed_bins[f];
+
+                    int nbins = distributed_num_bins[0][f];
+
+                    for (int i = 0; i < nbins; i++) {
+                        bins.push_back(DistributedBin(i, true, 0, bin_starts[f][i]));
+                        bins.push_back(DistributedBin(i, false, 0, bin_ends[f][i]));
+                    }
+
+                    vector<float> remote_bin_starts(max_bins);
+                    vector<float> remote_bin_ends(max_bins);
+
+                    for (int r = 1; r < mpi_world_size(); r++) {
+                        nbins = distributed_num_bins[r][f];
+
+                        // TODO: change these tags if we use asyncrhonous receives.
+                        //mpi_print("receiving starts for feature: ", f);
+                        MPI_Recv(remote_bin_starts.data(), nbins, MPI_FLOAT, r, MPI_ANY_TAG,
+                                MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                        //mpi_print("receiving ends for feature: ", f);
+                        MPI_Recv(remote_bin_ends.data(), nbins, MPI_FLOAT, r, MPI_ANY_TAG,
+                                MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+
+                        for (int i = 0; i < nbins; i++) {
+                            bins.push_back(DistributedBin(i, true, r, remote_bin_starts[i]));
+                            bins.push_back(DistributedBin(i, false, r, remote_bin_ends[i]));
+                        }
+                    }
+                    sort(bins.begin(), bins.end(), cmp_bin);
+                }
+            } else {
+                MPI_Send(num_bins.data(), num_features, MPI_INT, 0, num_bin_tag, MPI_COMM_WORLD);
+
+                for (int f = 0; f < num_features; f++) {
+                    MPI_Send(bin_starts[f].data(), num_bins[f], MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
+                    MPI_Send(bin_ends[f].data(), num_bins[f], MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
                 }
             }
-
-            // TODO: actually construct distributed bins from all nodes and sort it
-
-        } else {
-            // TODO: send to rank 0
-
         }
     }
-    }
-
-
 };
 
 class DatasetParser {

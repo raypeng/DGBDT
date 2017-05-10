@@ -1,6 +1,7 @@
 #ifndef MPI_UTIL_H
 #define MPI_UTIL_H
 
+#include <mpi.h>
 #include "iostream"
 
 void init_mpi_util(int rank, int num_nodes, int total_samples);
@@ -18,6 +19,8 @@ int mpi_start_index(int rank);
 int mpi_end_index(int rank);
 
 int mpi_num_samples(int rank);
+
+MPI_Datatype split_info_type();
 
 template <class T>
 void mpi_print(std::string prefix, T val) {

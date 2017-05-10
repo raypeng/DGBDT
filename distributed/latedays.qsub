@@ -16,4 +16,4 @@ cd $PBS_O_WORKDIR
 NODES=`sort -u $PBS_NODEFILE`
 echo $NODES
 
-mpirun -pernode -hostfile $PBS_NODEFILE $PROGRAM_NAME
+mpirun -pernode --mca btl_tcp_if_include em1 -hostfile $PBS_NODEFILE $PROGRAM_NAME

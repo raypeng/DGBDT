@@ -27,6 +27,10 @@ void BinDist::reset(int f) {
     std::fill(dist, dist + num_bins * num_classes, 0);
 }
 
+int* BinDist::head() {
+    return data;
+}
+
 int* BinDist::head(int f) {
     return &(data[f * num_bins * num_classes]);;
 }

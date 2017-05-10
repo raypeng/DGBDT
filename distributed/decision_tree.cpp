@@ -20,7 +20,7 @@
 
 using namespace std;
 
-SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, int feature_id, TreeNode* curr_node) {
+SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(Dataset& d, int feature_id, TreeNode* curr_node) {
     // entropy before split does not affect comparing info gain values across different features to split
     // so only pick smallest total entropy after split
     // equivalent to taking entropy before split as zero
@@ -28,18 +28,7 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, i
 
     BinDist& bin_dist = curr_node->get_bin_dist();
 
-    vector<BinDist*> distributed_bin_dist(mpi_world_size());
-
-    // avoid copying our own bin distribution
-    distributed_bin_dist[0] = &bin_dist;
-    for (int i = 1 ; i < distributed_bin_dist.size(); i++) {
-        distributed_bin_dist[i] = new BinDist(d.num_features, d.max_bins, d.num_classes);
-
-        // Use feature_id as tag to differentiate between different features
-        // if we parallelize this across different features.
-        MPI_Recv(distributed_bin_dist[i]->head(feature_id), bin_dist.size(), MPI_INT, i,
-                feature_id, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-    }
+    vector<BinDist*> distributed_bin_dist = d.distributed_bin_dist;
 
     // Accumulate total sample counts, individual bin sample counts,
     // and class distribution across all nodes.
@@ -114,13 +103,13 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, i
             while (i < dbins.size() - 1
                     && !(dbins[i+1].bin_start)
                     && float_equal(dbin.v, dbins[i+1].v)) {
-                mpi_print("in while loop");
                 add_vector(accumulate_dist, accumulate_dist, bin_dist->head(feature_id, dbin.bin));
                 total_samples_left += bin_counts[dbin.rank][dbin.bin];
 
                 active_bins.erase({dbin.rank,dbin.bin});
                 i++;
                 dbin = dbins[i];
+				bin_dist = distributed_bin_dist[dbin.rank];
             }
 
             add_vector(left_dist, left_dist, accumulate_dist);
@@ -128,6 +117,7 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, i
 
             // TODO: interpolation of active bins
 
+            active_bins.erase({dbin.rank,dbin.bin});
             total_samples_left += bin_counts[dbin.rank][dbin.bin];
             int total_samples_right = N - total_samples_left;
 
@@ -167,7 +157,12 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, i
     return {feature_id, min_entropy, best_split_thres, best_left_entropy, best_right_entropy};
 }
 
-SplitInfo DecisionTree::find_split(const Dataset& d, vector<int>& indices, TreeNode* curr_node) {
+static SplitInfo bcast_split_info(SplitInfo info) {
+	MPI_Bcast(&info, 1, split_info_type(), 0, MPI_COMM_WORLD);
+	return info;
+}
+
+SplitInfo DecisionTree::find_split(Dataset& d, vector<int>& indices, TreeNode* curr_node) {
     if (none_of(indices.begin(), indices.end(), [](bool x) {
         return x;
     })) {
@@ -178,18 +173,36 @@ SplitInfo DecisionTree::find_split(const Dataset& d, vector<int>& indices, TreeN
         return {MinSize, -1};
     }
 
+	// Stop if all nodes say stop.
+	pair<bool, NodeStatus> stop_result = should_stop(curr_node);
+	bool to_stop;
+	MPI_Allreduce(&stop_result.first, &to_stop, 1, MPI_BYTE, MPI_LAND, MPI_COMM_WORLD);
+	if (to_stop) {
+		mpi_print("detected should stop");
+		return {stop_result.second, -1, -1, -1, -1};
+	}
+
+	mpi_print("searching for feature to split");
     if (mpi_rank() == 0) {
         int best_feature = -1;
         float min_entropy = numeric_limits<float>::max();
         float best_left_entropy = -1, best_right_entropy = -1, best_split_thres = -1;
 
-        pair<bool, NodeStatus> stop_result = should_stop(curr_node);
-        if (stop_result.first) {
-            return {stop_result.second, -1, -1, -1, -1};
-        }
-
         _t = 0, _t2 = 0;
         double _tt = CycleTimer::currentSeconds();
+
+		// avoid copying our own bin distribution
+		BinDist& bin_dist = curr_node->get_bin_dist();
+		d.distributed_bin_dist[0] = &bin_dist;
+		for (int i = 1 ; i < d.distributed_bin_dist.size(); i++) {
+			// Use feature_id as tag to differentiate between different features
+			// if we parallelize this across different features.
+			MPI_Recv(d.distributed_bin_dist[i]->head(), bin_dist.size(), MPI_INT, i,
+					0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+		}
+
+        mpi_print("receiving bin dists taking: ", CycleTimer::currentSeconds() - _tt);
+
         for (int f = 0; f < d.num_features; f++) {
             auto curr_split_info = find_new_entropy_by_split_on_feature(d, f, curr_node);
             if (curr_split_info.min_entropy < min_entropy) {
@@ -200,8 +213,8 @@ SplitInfo DecisionTree::find_split(const Dataset& d, vector<int>& indices, TreeN
                 best_feature = f;
             }
         }
+        mpi_print("find_split outer main loop \t taking ", CycleTimer::currentSeconds() - _tt);
         /*
-        cerr << "find_split outer main loop \t taking " << CycleTimer::currentSeconds() - _tt << "s" << endl;
         cerr << "find_split outer initializing bin counts \t taking " << _t << "s" << endl;
         cerr << "find_split outer finding split index \t taking " << _t2 << "s" << endl;
         */
@@ -209,11 +222,24 @@ SplitInfo DecisionTree::find_split(const Dataset& d, vector<int>& indices, TreeN
         //
         float info_gain = curr_node->get_entropy() - min_entropy;
         if (info_gain < INFO_GAIN_THRESHOLD) {
-            return {NoGain, -1, -1, -1, -1};
+            return bcast_split_info({NoGain, -1, -1, -1, -1});
         }
-        return {best_feature, min_entropy, best_split_thres, best_left_entropy, best_right_entropy};
+        return bcast_split_info({best_feature, min_entropy, best_split_thres, best_left_entropy, best_right_entropy});
     } else {
-        // TODO: other nodes communication
+		BinDist& bin_dist = curr_node->get_bin_dist();
+
+		MPI_Send(bin_dist.head(), bin_dist.size(), MPI_INT, 0,
+				0, MPI_COMM_WORLD);
+
+        /*
+        MPI_Request request;
+		MPI_Isend(bin_dist.head(), bin_dist.size(), MPI_INT, 0,
+				0, MPI_COMM_WORLD, &request);
+                */
+
+		SplitInfo info;
+		MPI_Bcast(&info, 1, split_info_type(), 0, MPI_COMM_WORLD);
+		return info;
     }
 }
 
@@ -236,7 +262,7 @@ int DecisionTree::split_data(vector<int>& indices, const Dataset& d, TreeNode* c
                 return feature_row[index] <= split_point;
             });
 
-    cerr << "split_data\t taking " << CycleTimer::currentSeconds() - _t << "s" << endl;
+    //cerr << "split_data\t taking " << CycleTimer::currentSeconds() - _t << "s" << endl;
 
     return distance(indices.begin(), bound);
 }
@@ -332,7 +358,6 @@ void DecisionTree::train(Dataset &d) {
         work_queue.pop_front();
 
         // find split according to the data in curr
-        print(curr->node_id, "working on splitting node id");
         mpi_print("working on splitting node id: ", curr->node_id);
         _t = CycleTimer::currentSeconds();
         curr->split_info = find_split(d, indices, curr);
@@ -344,7 +369,7 @@ void DecisionTree::train(Dataset &d) {
             num_leaves++;
             switch (curr->split_info.split_feature_id) {
                 case PerfectSplit:
-		  cout << "perfect split already for node " << curr->node_id << endl;
+					cout << "perfect split already for node " << curr->node_id << endl;
                     break;
                 case MaxDepth:
                     cout << "node at max depth with id " << curr->node_id << endl;
@@ -435,7 +460,6 @@ void DecisionTree::train(Dataset &d) {
 	    }
 	*/
 
-        mpi_print("entering small bin dist calculation");
 #pragma omp parallel for schedule(static)
         for (int f = 0; f < d.num_features; f++) {
 
@@ -454,7 +478,6 @@ void DecisionTree::train(Dataset &d) {
         // Calculate right_dist by using left_dist
         subtract_vector(larger_dist, curr_dist, smaller_dist);
 
-        mpi_print("entering large bin dist calculation");
         // Similarly for bin dist
         larger_bin_dist.diff(curr_bin_dist, smaller_bin_dist);
 
@@ -462,6 +485,8 @@ void DecisionTree::train(Dataset &d) {
 
         mpi_print("calculating children dist took ", dist_end_time - dist_start_time);
 
+		mpi_print("left size: ", left_size);
+		mpi_print("right size: ", right_size);
         //cout<< "split index: " << split_index << endl;
         // cout<< "left size: " << curr->left_child->right - curr->left_child->left << endl;
         // cout<< "right size: " << curr->right_child->right - curr->right_child->left << endl;

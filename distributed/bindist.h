@@ -26,6 +26,8 @@ class BinDist {
 
         void inc(int f, int b, int c, int delta = 1);
 
+		int* head();
+
         int* head(int f);
 
         int* head(int f, int b);

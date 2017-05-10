@@ -1,7 +1,7 @@
 
 EXECUTABLE := main
 
-CU_FILES   := 
+CU_FILES   := decision_tree_util.cu
 
 CU_DEPS    :=
 
@@ -9,17 +9,10 @@ CC_FILES   := main.cpp decision_tree.cpp dataset.cpp
 
 ###########################################################
 
-ARCH=$(shell uname | sed -e 's/-.*//g')
 OBJDIR=objs
 CXX=g++ -m64
-CXXFLAGS=-O3 -std=c++11 -fopenmp
-HOSTNAME=$(shell hostname)
-
-LIBS       :=
-FRAMEWORKS :=
-
-NVCCFLAGS=-O3 -m64 --gpu-architecture compute_35
-LIBS += GL glut cudart
+CXXFLAGS=-O3 -std=c++11 -fopenmp -I/usr/local/depot/cuda-8.0/include/ -I/usr/local/cuda/include/ -g
+NVCCFLAGS=-O3 -m64 -std=c++11 --gpu-architecture compute_35 -I/usr/local/depot/cuda-8.0/include/ -I/usr/local/cuda/include/ -g
 
 ifneq ($(wildcard /opt/cuda-8.0/.*),)
 # Latedays
@@ -34,7 +27,7 @@ LDFRAMEWORKS := $(addprefix -framework , $(FRAMEWORKS))
 
 NVCC=nvcc
 
-OBJS=$(OBJDIR)/main.o $(OBJDIR)/decision_tree.o $(OBJDIR)/dataset.o
+OBJS=$(OBJDIR)/main.o $(OBJDIR)/decision_tree.o $(OBJDIR)/dataset.o $(OBJDIR)/decision_tree_util.o
 
 
 .PHONY: dirs clean
@@ -48,7 +41,7 @@ clean:
 		rm -rf $(OBJDIR) *~ $(EXECUTABLE)
 
 $(EXECUTABLE): dirs $(OBJS)
-		$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(LDFLAGS) $(LDLIBS) $(LDFRAMEWORKS)
+		$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(LDFLAGS)
 
 $(OBJDIR)/%.o: %.cpp
 		$(CXX) $< $(CXXFLAGS) -c -o $@

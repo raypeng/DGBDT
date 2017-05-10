@@ -13,7 +13,7 @@ bool is_root();
 
 template <class T>
 void mpi_print(std::string prefix, T val) {
-std::cout << "[node " << mpi_rank() << "] " << prefix << " " << val << std::endl;
+    std::cout << "[node " << mpi_rank() << "] " << prefix << " " << val << std::endl;
 }
 
 template <class T>

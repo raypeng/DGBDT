@@ -14,6 +14,8 @@
 #include "util.h"
 #include "CycleTimer.h"
 
+#include "decision_tree_util.h"
+
 #define INFO_GAIN_THRESHOLD 1e-3
 
 
@@ -272,6 +274,11 @@ void DecisionTree::train(Dataset &d) {
     list<TreeNode*> work_queue;
     work_queue.push_back(root);
 
+    // ptr to device memory
+    // used to make sure d.bins and smaller_bin_dist persist in device memory
+    int* device_bins = NULL;
+    int* device_bin_dist = NULL;
+
     // Pop leaves from work queue to split in a BFS order.
     double _t; // DEBUG
     while (num_leaves + work_queue.size() < max_num_leaves) {
@@ -360,6 +367,8 @@ void DecisionTree::train(Dataset &d) {
             end_index = curr->right;
         }
 
+	cout << "before smaller_dist " << CycleTimer::currentSeconds() - dist_start_time << endl;
+
         vector<int> labels(end_index - start_index);
 	for (int i = start_index; i < end_index; i++) {
             int index = indices[i];
@@ -367,6 +376,8 @@ void DecisionTree::train(Dataset &d) {
 	    labels[i - start_index] = label;
 	    smaller_dist[label]++;
 	}
+
+	cout << "after smaller_dist " << CycleTimer::currentSeconds() - dist_start_time << endl;
 
 	/*
 #pragma omp parallel
@@ -386,6 +397,13 @@ void DecisionTree::train(Dataset &d) {
 	    }
 	*/
 
+	update_smaller_bin_dist(d.bins, smaller_bin_dist, indices, labels,
+				start_index, end_index,
+				device_bins, device_bin_dist);
+
+	// cout << smaller_bin_dist[1].size() << " " << smaller_bin_dist[1][9].size();
+
+	/*
 #pragma omp parallel for schedule(static)
         for (int f = 0; f < d.num_features; f++) {
 
@@ -395,12 +413,13 @@ void DecisionTree::train(Dataset &d) {
             for (int i = start_index; i < end_index; i++) {
                 int index = indices[i];
                 int label = labels[i - start_index];
-
                 int bin = bins[index];
                 bin_dists[bin][label]++;
             }
         }
+	*/
 
+	cout << "after smaller_bin_dist " << CycleTimer::currentSeconds() - dist_start_time << endl;
 
         // Calculate right_dist by using left_dist
         subtract_vector(larger_dist, curr_dist, smaller_dist);

@@ -5,20 +5,26 @@
 #include "decision_tree_util.h"
 
 #define UPDIV(n, d) (((n)+(d)-1)/(d))
-
+#define NUM_THREADS_PER_BLOCK 256
 
 __global__ void
 kernel_update_bin_dist(int* d_bins, int* d_bin_dist, int* d_indices, int* d_labels,
 		       int start_index, int end_index,
-		       int num_features, int num_bins, int num_classes) {
+		       int num_features, int num_bins, int num_classes, int num_samples) {
   int thread_id = threadIdx.x;
   int block_id = blockIdx.x;
   int num_threads = blockDim.x;
   int f = block_id;
+  if (f >= num_features) {
+    return;
+  }
+  // printf("kernel block_id %d [%d - %d]\n", f, start_index, end_index);
   for (int i = start_index + thread_id; i < end_index; i += num_threads) {
     int index = d_indices[i - start_index];
     int label = d_labels[i - start_index];
-    int bin = d_bins[index];
+    int bin = d_bins[f * num_samples + index];
+    // int bin = d_bins[index];
+    // printf("f %d bin %d label %d\n", f, bin, label);
     atomicAdd(&d_bin_dist[f * num_bins * num_classes + bin * num_classes + label], 1);
   }
 }
@@ -58,12 +64,12 @@ void update_smaller_bin_dist(vector<vector<int>>& bins,
 
   cout << "entering kernel" << endl;
   double _t = CycleTimer::currentSeconds();
-  int num_threads_per_block = 32;
-  int num_blocks = UPDIV(num_features, num_threads_per_block);
+  int num_threads_per_block = NUM_THREADS_PER_BLOCK;
+  int num_blocks = num_features; // UPDIV(num_features, num_threads_per_block);
   kernel_update_bin_dist<<<num_blocks, num_threads_per_block>>>
     (d_bins, d_bin_dist, d_indices, d_labels,
      start_index, end_index,
-     num_features, num_bins, num_classes);
+     num_features, num_bins, num_classes, num_samples);
   cudaThreadSynchronize();
   cout << "exiting kernel: " << CycleTimer::currentSeconds() - _t << endl;
 

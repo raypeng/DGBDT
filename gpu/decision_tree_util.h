@@ -4,6 +4,7 @@
 #include <iostream>
 #include <cuda.h>
 #include <vector>
+#include <cstdio>
 #include <thrust/device_vector.h>
 #include <thrust/gather.h>
 #include <thrust/execution_policy.h>

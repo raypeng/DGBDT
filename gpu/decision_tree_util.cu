@@ -8,113 +8,138 @@
 #define NUM_THREADS_PER_BLOCK 256
 
 __global__ void
-kernel_update_bin_dist(int* d_bins, int* d_bin_dist, int* d_indices, int* d_labels,
+kernel_update_bin_dist(int* d_bins, int* d_bin_dist, int* d_indices, int* d_y,
 		       int start_index, int end_index,
 		       int num_features, int num_bins, int num_classes, int num_samples) {
   int thread_id = threadIdx.x;
   int block_id = blockIdx.x;
   int num_threads = blockDim.x;
   int f = block_id;
-  if (f >= num_features) {
-    return;
-  }
   // printf("kernel block_id %d [%d - %d]\n", f, start_index, end_index);
   for (int i = start_index + thread_id; i < end_index; i += num_threads) {
     int index = d_indices[i - start_index];
-    int label = d_labels[i - start_index];
+    int label = d_y[index];
     int bin = d_bins[f * num_samples + index];
-    // int bin = d_bins[index];
-    // printf("f %d bin %d label %d\n", f, bin, label);
     atomicAdd(&d_bin_dist[f * num_bins * num_classes + bin * num_classes + label], 1);
   }
+}
+
+void initialize_device_memory(vector<vector<int>>& bins,
+			      vector<vector<vector<int>>>& smaller_bin_dist,
+			      vector<int>& y,
+			      int num_bins,
+			      int num_classes,
+			      int*& d_bins,
+			      int*& d_bin_dist,
+			      int*& d_y) {
+
+  int num_features = bins.size();
+  int num_samples = bins.front().size();
+
+  double gpu_t = CycleTimer::currentSeconds();
+
+  cudaMalloc(&d_bins, sizeof(int) * num_features * num_samples);
+  for (int f = 0; f < num_features; f++) {
+    // cout << "bin size " << f << " " << bins[f].size() << endl;
+    cudaMemcpy(d_bins + f * num_samples, bins[f].data(), sizeof(int) * num_samples, cudaMemcpyHostToDevice);
+  }
+  cudaMalloc(&d_bin_dist, sizeof(int) * num_features * num_bins * num_classes);
+  cudaMemset(d_bin_dist, 0, sizeof(int) * num_features * num_bins * num_classes);
+  cudaMalloc(&d_y, sizeof(int) * num_samples);
+  cudaMemcpy(d_y, y.data(), sizeof(int) * num_samples, cudaMemcpyHostToDevice);
+
+  cout << "intialize cuda memory: " << CycleTimer::currentSeconds() - gpu_t << endl;
+  
 }
 
 void update_smaller_bin_dist(vector<vector<int>>& bins,
 			     vector<vector<vector<int>>>& smaller_bin_dist,
 			     vector<int>& indices,
 			     vector<int>& labels,
+			     vector<int>& y,
 			     int start_index,
 			     int end_index,
 			     int*& d_bins,
-			     int*& d_bin_dist) {
+			     int*& d_bin_dist,
+			     int*& d_y,
+			     int num_features_gpu,
+			     int num_bins,
+			     int num_classes) {
+
+  cout << "update bin_dist num_samples: " << end_index - start_index << endl;
+
   int num_features = bins.size();
-  int num_bins = 255;
-  int num_classes = 5;
   int num_samples = bins.front().size();
 
-  if (d_bins == NULL) {
-    cudaMalloc(&d_bins, sizeof(int) * num_features * num_samples);
-    for (int f = 0; f < num_features; f++) {
-      // cout << "bin size " << f << " " << bins[f].size() << endl;
-      cudaMemcpy(d_bins + f * num_samples, bins[f].data(), sizeof(int) * num_samples, cudaMemcpyHostToDevice);
+  if (num_features_gpu > 0) {
+    if (d_bins == NULL) {
+      initialize_device_memory(bins, smaller_bin_dist, y,
+			       num_bins, num_classes,
+			       d_bins, d_bin_dist, d_y);
+    } else {
+      assert(d_bin_dist != NULL);
+      assert(d_y != NULL);
     }
-    cout << "cudaMalloc(d_bins)" << endl;
   }
-  if (d_bin_dist == NULL) {
-    cudaMalloc(&d_bin_dist, sizeof(int) * num_features * num_bins * num_classes);
-  }
-  cudaMemset(d_bin_dist, 0, sizeof(int) * num_features * num_bins * num_classes);
+
+  double gpu_t = CycleTimer::currentSeconds();
 
   int* d_indices;
-  cudaMalloc(&d_indices, sizeof(int) * (end_index - start_index));
-  cudaMemcpy(d_indices, indices.data() + start_index, sizeof(int) * (end_index - start_index), cudaMemcpyHostToDevice);
-  int* d_labels;
-  cudaMalloc(&d_labels, sizeof(int) * (end_index - start_index));
-  cudaMemcpy(d_labels, labels.data(), sizeof(int) * (end_index - start_index), cudaMemcpyHostToDevice);
 
-  cout << "entering kernel" << endl;
-  double _t = CycleTimer::currentSeconds();
-  int num_threads_per_block = NUM_THREADS_PER_BLOCK;
-  int num_blocks = num_features; // UPDIV(num_features, num_threads_per_block);
-  kernel_update_bin_dist<<<num_blocks, num_threads_per_block>>>
-    (d_bins, d_bin_dist, d_indices, d_labels,
-     start_index, end_index,
-     num_features, num_bins, num_classes, num_samples);
-  cudaThreadSynchronize();
-  cout << "exiting kernel: " << CycleTimer::currentSeconds() - _t << endl;
+  if (num_features_gpu > 0) {
+    cudaMemset(d_bin_dist, 0, sizeof(int) * num_features * num_bins * num_classes);
+    cudaMalloc(&d_indices, sizeof(int) * (end_index - start_index));
+    cudaMemcpy(d_indices, indices.data() + start_index, sizeof(int) * (end_index - start_index), cudaMemcpyHostToDevice);
 
-  int* h_bin_dist = new int[num_features * num_bins * num_classes];
-  cudaMemcpy(h_bin_dist, d_bin_dist, sizeof(int) * num_features * num_bins * num_classes, cudaMemcpyDeviceToHost);
-  cout << "h_bin_dist done" << endl;
-  for (int f = 0; f < num_features; f++) {
-    for (int bin = 0; bin < num_bins; bin++) {
-      for (int label = 0; label < num_classes; label++) {
-	int i = f * num_bins * num_classes + bin * num_classes + label;
-	if (h_bin_dist[i] > 0) {
-	  if (bin >= smaller_bin_dist[f].size() || label >= smaller_bin_dist[f][bin].size()) {
-	    cout << i << " " << f << " " << bin << " " << label << " " << h_bin_dist[i] << endl;
-	    cout << smaller_bin_dist[f].size() << " " << smaller_bin_dist[f][bin].size() << endl;
-	    continue;
+    cout << "entering kernel" << endl;
+    int num_threads_per_block = NUM_THREADS_PER_BLOCK;
+    int num_blocks = num_features;
+    kernel_update_bin_dist<<<num_blocks, num_threads_per_block>>>
+      (d_bins, d_bin_dist, d_indices, d_y,
+       start_index, end_index,
+       num_features, num_bins, num_classes, num_samples);
+  }
+
+  if (num_features_gpu < num_features) {
+    update_smaller_bin_dist_cpu(bins, smaller_bin_dist, indices, labels,
+				start_index, end_index,
+				num_features_gpu, num_features);
+  }
+
+  if (num_features_gpu > 0) {
+    cudaThreadSynchronize();
+
+    cout << "exiting kernel: " << num_features_gpu << " features\t" << CycleTimer::currentSeconds() - gpu_t << endl;
+
+    int* h_bin_dist = new int[num_features * num_bins * num_classes];
+    cudaMemcpy(h_bin_dist, d_bin_dist, sizeof(int) * num_features * num_bins * num_classes, cudaMemcpyDeviceToHost);
+    cout << "h_bin_dist done" << endl;
+    for (int f = 0; f < num_features; f++) {
+      for (int bin = 0; bin < num_bins; bin++) {
+	for (int label = 0; label < num_classes; label++) {
+	  int i = f * num_bins * num_classes + bin * num_classes + label;
+	  if (h_bin_dist[i] > 0) {
+	    if (bin >= smaller_bin_dist[f].size() || label >= smaller_bin_dist[f][bin].size()) {
+	      abort();
+	      cout << i << " " << f << " " << bin << " " << label << " " << h_bin_dist[i] << endl;
+	      cout << smaller_bin_dist[f].size() << " " << smaller_bin_dist[f][bin].size() << endl;
+	      continue;
+	    }
+	    smaller_bin_dist[f][bin][label] = h_bin_dist[i];
 	  }
-	  smaller_bin_dist[f][bin][label] = h_bin_dist[i];
 	}
       }
     }
-  }
-  /*
-  for (int i = 0; i < num_features * num_bins * num_classes; i++) {
-    if (h_bin_dist[i] > 0) {
-      int f = i / (num_bins * num_classes);
-      int bin = (i / num_classes) % num_bins;
-      int label = i % num_classes;
-      if (bin >= smaller_bin_dist[f].size() || label >= smaller_bin_dist[f][bin].size()) {
-	cout << i << " " << f << " " << bin << " " << label << " " << h_bin_dist[i] << endl;
-	cout << smaller_bin_dist[f].size() << " " << smaller_bin_dist[f][bin].size() << endl;
-	continue;
-      }
-      smaller_bin_dist[f][bin][label] = h_bin_dist[i];
-    }
-  }
-  */
-  cout << "smaller_bin_dist done" << endl;
 
-  cudaFree(d_indices);
-  cudaFree(d_labels);
-  delete[] h_bin_dist;
+    cout << "smaller_bin_dist done" << endl;
+
+    cudaFree(d_indices);
+    delete[] h_bin_dist;
+  }
 }
 
-
 /*
+// abandoned thrust code
 void update_smaller_bin_dist(vector<vector<int>>& bins,
 			     vector<vector<vector<int>>>& smaller_bin_dist,
 			     vector<int>& indices,

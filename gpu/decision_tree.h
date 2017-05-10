@@ -35,4 +35,14 @@ public:
 
     int test_single_sample(const Dataset& d, int sample_id);
 };
+
+void update_smaller_bin_dist_cpu(vector<vector<int>>& bins,
+				 vector<vector<vector<int>>>& smaller_bin_dist,
+				 vector<int>& indices,
+				 vector<int>& labels,
+				 int start_index,
+				 int end_index,
+				 int start_feature,
+				 int end_feature);
+
 #endif //SEQUENTIAL_DECISION_TREE_H

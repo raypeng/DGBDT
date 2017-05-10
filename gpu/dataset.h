@@ -29,6 +29,7 @@ struct Dataset {
     int num_features;
     int num_samples;
     int num_classes;
+    int max_bins;
     // x: num_features by num_samples
     vector<vector<float>> x;
 
@@ -47,7 +48,8 @@ struct Dataset {
     // WARNING: calling this will render x to be unusable.
     //
     // Use bins as a discretized dataset after calling this.
-    void build_bins(int max_bins, TreeNode* root) {
+    void build_bins(int max_bins_, TreeNode* root) {
+        max_bins = max_bins_;
 
         vector<vector<vector<int>>>& bin_dists = root->get_bin_dist();
 

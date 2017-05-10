@@ -21,6 +21,30 @@
 
 using namespace std;
 
+void update_smaller_bin_dist_cpu(vector<vector<int>>& bins,
+				 vector<vector<vector<int>>>& smaller_bin_dist,
+				 vector<int>& indices,
+				 vector<int>& labels,
+				 int start_index,
+				 int end_index,
+				 int start_feature,
+				 int end_feature) {
+    double cpu_t = CycleTimer::currentSeconds();
+#pragma omp parallel for schedule(static)
+  for (int f = start_feature; f < end_feature; f++) {
+    vector<int>& feature_bins = bins[f];
+    vector<vector<int>>& bin_dists = smaller_bin_dist[f];
+    for (int i = start_index; i < end_index; i++) {
+      int index = indices[i];
+      int label = labels[i - start_index];
+      int bin = feature_bins[index];
+      bin_dists[bin][label]++;
+    }
+  }
+  cout << "exiting cpu: " << end_feature - start_feature << " features\t" << CycleTimer::currentSeconds() - cpu_t << endl;
+
+}
+
 SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, vector<int>& indices, int feature_id, TreeNode* curr_node) {
     // entropy before split does not affect comparing info gain values across different features to split
     // so only pick smallest total entropy after split
@@ -278,6 +302,7 @@ void DecisionTree::train(Dataset &d) {
     // used to make sure d.bins and smaller_bin_dist persist in device memory
     int* device_bins = NULL;
     int* device_bin_dist = NULL;
+    int* device_y = NULL;
 
     // Pop leaves from work queue to split in a BFS order.
     double _t; // DEBUG
@@ -397,27 +422,11 @@ void DecisionTree::train(Dataset &d) {
 	    }
 	*/
 
-	update_smaller_bin_dist(d.bins, smaller_bin_dist, indices, labels,
+	int num_features_gpu = 0; // d.num_features;
+	update_smaller_bin_dist(d.bins, smaller_bin_dist, indices, labels, d.y,
 				start_index, end_index,
-				device_bins, device_bin_dist);
-
-	// cout << smaller_bin_dist[1].size() << " " << smaller_bin_dist[1][9].size();
-
-	/*
-#pragma omp parallel for schedule(static)
-        for (int f = 0; f < d.num_features; f++) {
-
-            vector<int>& bins = d.bins[f];
-            vector<vector<int>>& bin_dists = smaller_bin_dist[f];
-
-            for (int i = start_index; i < end_index; i++) {
-                int index = indices[i];
-                int label = labels[i - start_index];
-                int bin = bins[index];
-                bin_dists[bin][label]++;
-            }
-        }
-	*/
+				device_bins, device_bin_dist, device_y,
+				num_features_gpu, d.max_bins, d.num_classes);
 
 	cout << "after smaller_bin_dist " << CycleTimer::currentSeconds() - dist_start_time << endl;
 
@@ -499,3 +508,4 @@ float DecisionTree::test(const Dataset& d) {
     }
     return 1. * num_correct / d.num_samples;
 }
+

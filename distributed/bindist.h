@@ -10,6 +10,8 @@ class BinDist {
     public:
         BinDist();
 
+        BinDist(int num_features, int num_bins, int num_classes);
+
         void setup(int num_features, int num_bins, int num_classes);
 
         void reset(int f);
@@ -18,9 +20,13 @@ class BinDist {
 
         void diff(BinDist& a, BinDist& b);
 
+        int size();
+
         int get(int f, int b, int c);
 
         void inc(int f, int b, int c, int delta = 1);
+
+		int* head();
 
         int* head(int f);
 

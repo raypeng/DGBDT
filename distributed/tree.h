@@ -10,6 +10,8 @@
 #include <algorithm>
 #include <iterator>
 #include "bindist.h"
+#include "mpi_util.h"
+#include "mypprint.hpp"
 
 using namespace std;
 
@@ -17,7 +19,6 @@ struct SplitInfo {
     int split_feature_id; // going to be NodeStatus if < 0
     float min_entropy;
     float split_threshold;
-    int split_bin;
     float left_entropy;
     float right_entropy;
 };
@@ -74,8 +75,25 @@ public:
 
     void update_majority_label() {
         int* data = class_dist.data();
-        majority_label = distance(data, max_element(data,
-                    data + class_dist.size()));
+		int num_classes = class_dist.size();
+		vector<int> global_data(mpi_world_size() * num_classes,0);
+        int* recv_buf = is_root() ? global_data.data() : NULL;
+
+		MPI_Gather(data, num_classes, MPI_INT, recv_buf,
+				num_classes, MPI_INT, 0, MPI_COMM_WORLD);
+
+        if (is_root()) {
+            fill(class_dist.begin(), class_dist.end(), 0);
+
+            for (int i = 0; i < global_data.size(); i++) {
+                int c = i % num_classes;
+                class_dist[c] += global_data[i];
+            }
+
+            majority_label = distance(data, max_element(data,
+                        data + class_dist.size()));
+            mpi_print("majority label: ", majority_label);
+        }
     }
 
     void set_entropy(float entropy_) {

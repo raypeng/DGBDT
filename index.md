@@ -54,7 +54,7 @@ time for a dataset with over 11 million samples, which is
 The standard sequential implementation for decision tree learning looks
 something like this:
 
-```
+<pre>
 while (!work_queue.empty()) {
   node = work_queue.remove_head()
 
@@ -76,7 +76,7 @@ while (!work_queue.empty()) {
   work_queue.add(right)
 
 }
-```
+</pre>
 
 Since decision trees are created by splitting on feature values, sorting the
 data is required to efficiently compute distribution statistics of
@@ -87,7 +87,7 @@ To improve upon this, we implemented an algorithm that first builds a
 histogram of every feature that roughly captures the distribution statistics
 of the data. Using this algorithm, training roughly looks like this:
 
-```
+<pre>
 build_histograms()
 
 while (!work_queue.empty()) {
@@ -112,7 +112,7 @@ while (!work_queue.empty()) {
   work_queue.add(right)
 
 }
-```
+</pre>
 
 This eliminates sorting the data and also scans over histogram
 bins instead of data points. Since number of bins (set to a constant value like

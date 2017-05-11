@@ -17,6 +17,7 @@
 #include "decision_tree_util.h"
 
 #define INFO_GAIN_THRESHOLD 1e-3
+#define HYBRID_CUTOFF 10000
 
 
 using namespace std;
@@ -66,13 +67,13 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(const Dataset& d, v
             count += dist[j];
 
         }
-        bin_counts[i] = count;
+	bin_counts[i] = count;
     }
 
     _t += CycleTimer::currentSeconds();
     // cerr << "find_split inner construct ft_pairs \t taking " << CycleTimer::currentSeconds() - _tt << "s" << endl;
 
-        // _t += CycleTimer::currentSeconds();
+    // _t += CycleTimer::currentSeconds();
     // cerr << "find_split inner sorting ft_pairs \t taking " << CycleTimer::currentSeconds() - _tt << "s" << endl;
     // print(ft_pairs, "find_split_feature ft_pairs");
     // get statistics of how many samples are from each class that says yes to feature < thres
@@ -302,6 +303,7 @@ void DecisionTree::train(Dataset &d) {
     // used to make sure d.bins and smaller_bin_dist persist in device memory
     int* device_bins = NULL;
     int* device_bin_dist = NULL;
+    int* device_indices = NULL;
     int* device_y = NULL;
 
     // Pop leaves from work queue to split in a BFS order.
@@ -422,10 +424,19 @@ void DecisionTree::train(Dataset &d) {
 	    }
 	*/
 
-	int num_features_gpu = 0; // d.num_features;
-	update_smaller_bin_dist(d.bins, smaller_bin_dist, indices, labels, d.y,
+	int num_samples_here = end_index - start_index;
+	int num_features_gpu = d.num_features / 2;
+	// too few samples -> CPU
+	// otherwise -> 50/50 hybrid
+	if (num_samples_here < HYBRID_CUTOFF) {
+	  // num_features_gpu = 0;
+	} else {
+	  // num_features_gpu = d.num_features / 2;
+	}
+
+	update_smaller_bin_dist(d.bins, smaller_bin_dist, indices, labels, d.y, d.num_bins,
 				start_index, end_index,
-				device_bins, device_bin_dist, device_y,
+				device_bins, device_bin_dist, device_indices, device_y,
 				num_features_gpu, d.max_bins, d.num_classes);
 
 	cout << "after smaller_bin_dist " << CycleTimer::currentSeconds() - dist_start_time << endl;

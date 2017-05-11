@@ -2,7 +2,7 @@ import sys
 
 assert len(sys.argv) == 2, 'in_file'
 in_file = sys.argv[1]
-out_file = in_file.replace('.txt', '.tab.txt')
+out_file = in_file.replace('.csv', '.tab.txt')
 
 def preprocess(line):
     chunks = line.strip().split(',')
@@ -11,7 +11,7 @@ def preprocess(line):
     new_chunks = [label] + features
     return '\t'.join(new_chunks)
 
-with open(in_file, 'r') as f:
-    lines = f.readlines()
-with open(out_file, 'w') as f:
-    f.write('\n'.join(preprocess(line) for line in lines))
+with open(out_file, 'w') as outf:
+    with open(in_file, 'r') as f:
+        for line in f:
+            outf.write(preprocess(line) + '\n')

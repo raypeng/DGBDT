@@ -1,3 +1,3 @@
-# Distributed Gradient Boosted Decision Tree on GPU
+# Distributed Decision Trees with Heterogeneous Parallelism
 
 [Proposal](./proposal.md)

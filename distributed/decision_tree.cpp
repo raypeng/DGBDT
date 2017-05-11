@@ -337,7 +337,7 @@ SplitInfo DecisionTree::find_split(Dataset& d, vector<int>& indices, TreeNode* c
                 MPI_Recv(d.distributed_bin_dist[r]->head(f), d.distributed_num_bins[r][f] * d.num_classes, MPI_INT, r,
                         0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             }
-            mpi_print("receiving bin dists taking: ", CycleTimer::currentSeconds() - _tt);
+            //mpi_print("receiving bin dists taking: ", CycleTimer::currentSeconds() - _tt);
             hist_time += CycleTimer::currentSeconds() - hist_start;
 
             auto curr_split_info = find_new_entropy_by_split_on_feature(d, f, curr_node);
@@ -351,7 +351,7 @@ SplitInfo DecisionTree::find_split(Dataset& d, vector<int>& indices, TreeNode* c
         }
 
         outer_loop_time += (CycleTimer::currentSeconds() - _tt);
-        mpi_print("find_split outer main loop \t taking ", CycleTimer::currentSeconds() - _tt);
+        //mpi_print("find_split outer main loop \t taking ", CycleTimer::currentSeconds() - _tt);
         /*
         cerr << "find_split outer initializing bin counts \t taking " << _t << "s" << endl;
         cerr << "find_split outer finding split index \t taking " << _t2 << "s" << endl;

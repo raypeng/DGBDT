@@ -202,13 +202,33 @@ data around and incrementing counters in memory. This kind of computation lends
 itself well to a GPU implementation. The initial histogram construction phase,
 however, cannot be implemented efficiently on GPU due to the divergent exeuction
 pattern of the adaptive histogram building algorithm. This motivates a hybrid
-algorithm: build the inital histograms using multi-threaded CPU, and
-use both the GPU and CPU to accelerate child histogram computation. Furthermore,
-since the speedup graph for CPU suggests that our algorithm may be bandwidth
+algorithm: build the initial histograms using multi-threaded CPU, and
+use both the GPU and CPU to accelerate child histogram computation (pseudo-code
+below):
+
+```
+
+gpu_features = get_gpu_features(features)
+cpu_features = get_cpu_features(features)
+gpu_result = []
+cpu_result = []
+
+gpu_compute_histograms_for_features(gpu_features, gpu_result)<<<kernel params>>>
+
+// Asynchronously compute on cpu.
+cpu_compute_histograms_for_features(cpu_features, cpu_result)
+
+cudaThreadSynchronize()
+
+merge_results(gpu_result, cpu_result)
+
+```
+
+Since the speedup graph for CPU suggests that our algorithm may be bandwidth
 bound, an implementation that uses both the memory bandwidth of GPU and CPU will
-likely be faster.
-Initial results show that hybrid reduces tree building time by 20% over GPU only and
-CPU only when running on a massive dataset with 11 million samples, but we are working on
+likely be faster. Initial results show that hybrid reduces tree building time by 20%
+over GPU only when running on a massive dataset with 11 million samples, with a CPU
+only implementation being slower than both, but we are working on
 optimizing this further.
 
 ## Further Work

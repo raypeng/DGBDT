@@ -78,7 +78,7 @@ while (!work_queue.empty()) {
 }
 ```
 
-Since decision trees are created with splitting on feature values, sorting the
+Since decision trees are created by splitting on feature values, sorting the
 data is required to efficiently compute distribution statistics of
 the data while scanning through data in the inner loop. The repeated sorting of
 data makes this algorithm slow.
@@ -124,7 +124,7 @@ histogram construction algorithm from this
 child histograms by first computing the smaller one, then performing histogram
 subtraction to get the larger one.
 
-Below are performance and accuracy comparisons between our implementation of the
+Below are performance comparisons between our implementation of the
 above two algorithms and the popular decision tree learning framework sci-kit learn.
 We benchmarked on the [Microsoft Learn to
 Rank](https://www.microsoft.com/en-us/research/project/mslr/) dataset, which contains 2
@@ -135,8 +135,8 @@ the relevance of the query to the url.
 ![OpenMP](assets/runtime-openmp.png)
 
 
-Note that although our accuracy has decreased slightly due to the approximate
-nature of our histogram binning, the reduction is small
+Note that although our accuracy has also decreased slightly due to the approximate
+nature of our histogram binning, the reduction is small (on the order of 0.1)
 and not much of a concern if we used our algorithm in an ensemble method (which
 people often do with decision trees). Furthermore, since our focus is on
 performance, we decided to not spend too
@@ -157,8 +157,12 @@ histograms and constructing child histograms requires scanning over
 the distributions of every histogram bin of every feature, this leads to a
 roughly balanced workload. The speedup graphs are shown below.
 
-
 Explain speedup graphs here.
+
+The speedup graph above at first displays near-linear speedup, especially for
+histogram construction across different features. We suspect that the eventual
+dissipation of speedup is due to memory bandwidth issues since constructing
+child histograms has very little arithmetic intensity.
 
 ## Distributing Training with Multiple Machines
 
@@ -195,7 +199,17 @@ the root by performing some local computation first.
 Another advantage of our histogram implementation is that the main bottleneck during
 tree construction is computing child histograms, which requires a lot of moving
 data around and incrementing counters in memory. This kind of computation lends
-itself well to a GPU implementation,
+itself well to a GPU implementation. The initial histogram construction phase,
+however, cannot be implemented efficiently on GPU due to the divergent exeuction
+pattern of the adaptive histogram building algorithm. This motivates a hybrid
+algorithm: build the inital histograms using multi-threaded CPU, and
+use both the GPU and CPU to accelerate child histogram computation. Furthermore,
+since the speedup graph for CPU suggests that our algorithm may be bandwidth
+bound, an implementation that uses both the memory bandwidth of GPU and CPU will
+likely be faster.
+Initial results show that hybrid reduces tree building time by 20% over GPU only and
+CPU only when running on a massive dataset with 11 million samples, but we are working on
+optimizing this further.
 
 ## Further Work
 
@@ -212,5 +226,3 @@ We have two main goals to focus on:
    [paper](https://www.google.com/search?q=communication+efficient+decision+tree+learning&oq=communication+efficient+decision+tree+learning&aqs=chrome..69i57j69i60j0.4052j0j4&sourceid=chrome&ie=UTF-8) recently published at NIPS that will help us in this regard.
    We hope that implementing their idea will allow us to scale beyond two
    machines.
-3. If we have time, combine our distributed implementation with our hybrid
-   implementation and benchmark it.

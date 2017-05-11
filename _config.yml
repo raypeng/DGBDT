@@ -1,7 +1,7 @@
 # Site settings
-title: Distributed Gradient Boosted Decision Tree on GPU
-tag_text: 
-description: 
+title: Distributed Decision Trees with Heterogeneous Parallelism
+tag_text:
+description:
 
 # Build settings
 markdown: kramdown

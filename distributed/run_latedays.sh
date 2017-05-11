@@ -8,7 +8,7 @@ WALLTIME=4
 
 # Ensure 2 arguments for nodes and processors per node.
 if [ $# -ne 1 ]; then
-  echo "Usage: $(basename $0) nodes processors_per_node"
+  echo "Usage: $(basename $0) nodes"
   exit $E_BADARGS
 fi
 

@@ -18,7 +18,7 @@
 
 #define INFO_GAIN_THRESHOLD 1e-3
 
-#define NUM_VOTES 3
+#define NUM_VOTES 5
 
 using namespace std;
 
@@ -273,6 +273,39 @@ SplitInfo DecisionTree::find_split(Dataset& d, vector<int>& indices, TreeNode* c
     Heap h(NUM_VOTES);
     collect_top_k_features(d, curr_node, h);
     mpi_print("found local top k: ", h.get_ids());
+
+    Heap feature_heap(2 * NUM_VOTES);
+    vector<int> best_features;
+
+    // Perform voting
+    if (is_root()) {
+        vector<int> all_votes(NUM_VOTES * mpi_world_size());
+		MPI_Gather(h.data(), NUM_VOTES, MPI_INT, all_votes.data(),
+				NUM_VOTES, MPI_INT, 0, MPI_COMM_WORLD);
+        mpi_print("all votes: ", all_votes);
+
+        // Top 2k will be requested
+
+        vector<int> vote_counts(d.num_features);
+        // Kinda hacky, since we have a max heap, but we want to keep
+        // the max in the heap, we use negative votes
+        for (int i = 0; i < all_votes.size(); i++) {
+            vote_counts[all_votes[i]]--;
+        }
+        for (int f = 0; f < vote_counts.size(); f++) {
+            int count = vote_counts[f];
+            if (count < 0 && count < feature_heap.max()) {
+                feature_heap.insert(f,count);
+            }
+        }
+
+        best_features = feature_heap.get_ids();
+        best_features.resize(feature_heap.get_num());
+        mpi_print("best features: ", best_features);
+    } else {
+		MPI_Gather(h.data(), NUM_VOTES, MPI_INT, NULL,
+				NUM_VOTES, MPI_INT, 0, MPI_COMM_WORLD);
+    }
 
     if (is_root()) {
         int best_feature = -1;

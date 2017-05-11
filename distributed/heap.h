@@ -24,6 +24,8 @@ class Heap {
         vector<int>& get_ids();
 
         int* data();
+
+        int get_num();
 };
 
 #endif

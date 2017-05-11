@@ -45,3 +45,7 @@ vector<int>& Heap::get_ids() {
 int* Heap::data() {
     return ids.data();
 }
+
+int Heap::get_num() {
+    return num;
+}

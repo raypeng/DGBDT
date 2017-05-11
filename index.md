@@ -199,7 +199,10 @@ itself well to a GPU implementation. The initial histogram construction phase,
 however, cannot be implemented efficiently on GPU due to the divergent exeuction
 pattern of the adaptive histogram building algorithm. This motivates a hybrid
 algorithm: build the inital histograms using multi-threaded CPU, and
-use both the GPU and CPU to accelerate child histogram computation.
+use both the GPU and CPU to accelerate child histogram computation. Furthermore,
+since the speedup graph for CPU suggests that our algorithm may be bandwidth
+bound, an implementation that uses both the memory bandwidth of GPU and CPU will
+likely be faster.
 Initial results show that hybrid reduces tree building time by 20% over GPU only and
 CPU only when running on a massive dataset with 11 million samples, but we are working on
 optimizing this further.

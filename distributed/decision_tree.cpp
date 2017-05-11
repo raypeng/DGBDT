@@ -19,6 +19,7 @@
 #define INFO_GAIN_THRESHOLD 1e-3
 
 #define NUM_VOTES 5
+#define INVALID_FEATURE -1
 
 using namespace std;
 
@@ -29,6 +30,7 @@ static double bcast_time = 0;
 static double outer_loop_time = 0;
 static double accum_count_time = 0;
 static double scan_dbin_time = 0;
+static double voting_comm_time = 0;
 
 void DecisionTree::collect_top_k_features(const Dataset& d, TreeNode* curr_node,
     Heap& h) {
@@ -267,12 +269,9 @@ SplitInfo DecisionTree::find_split(Dataset& d, vector<int>& indices, TreeNode* c
     double stop_end = CycleTimer::currentSeconds();
     stop_time += (stop_end - stop_start);
 
-	mpi_print("searching for feature to split");
 
-    mpi_print("searching for local top k");
     Heap h(NUM_VOTES);
     collect_top_k_features(d, curr_node, h);
-    mpi_print("found local top k: ", h.get_ids());
 
     Heap feature_heap(2 * NUM_VOTES);
     vector<int> best_features;
@@ -280,9 +279,10 @@ SplitInfo DecisionTree::find_split(Dataset& d, vector<int>& indices, TreeNode* c
     // Perform voting
     if (is_root()) {
         vector<int> all_votes(NUM_VOTES * mpi_world_size());
+        double gather_start = CycleTimer::currentSeconds();
 		MPI_Gather(h.data(), NUM_VOTES, MPI_INT, all_votes.data(),
 				NUM_VOTES, MPI_INT, 0, MPI_COMM_WORLD);
-        mpi_print("all votes: ", all_votes);
+        voting_comm_time += (CycleTimer::currentSeconds() - gather_start);
 
         // Top 2k will be requested
 
@@ -301,10 +301,17 @@ SplitInfo DecisionTree::find_split(Dataset& d, vector<int>& indices, TreeNode* c
 
         best_features = feature_heap.get_ids();
         best_features.resize(feature_heap.get_num());
-        mpi_print("best features: ", best_features);
+
+        double bcast_start = CycleTimer::currentSeconds();
+		MPI_Bcast(best_features.data(), best_features.size(), MPI_INT, 0, MPI_COMM_WORLD);
+        voting_comm_time += (CycleTimer::currentSeconds() - bcast_start);
+
     } else {
 		MPI_Gather(h.data(), NUM_VOTES, MPI_INT, NULL,
 				NUM_VOTES, MPI_INT, 0, MPI_COMM_WORLD);
+
+        best_features.resize(NUM_VOTES * 2, INVALID_FEATURE);
+		MPI_Bcast(best_features.data(), NUM_VOTES * 2, MPI_INT, 0, MPI_COMM_WORLD);
     }
 
     if (is_root()) {
@@ -318,17 +325,21 @@ SplitInfo DecisionTree::find_split(Dataset& d, vector<int>& indices, TreeNode* c
 		// avoid copying our own bin distribution
 		BinDist& bin_dist = curr_node->get_bin_dist();
 		d.distributed_bin_dist[0] = &bin_dist;
-		for (int i = 1 ; i < d.distributed_bin_dist.size(); i++) {
-			// Use feature_id as tag to differentiate between different features
-			// if we parallelize this across different features.
-			MPI_Recv(d.distributed_bin_dist[i]->head(), bin_dist.size(), MPI_INT, i,
-					0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-		}
 
-        mpi_print("receiving bin dists taking: ", CycleTimer::currentSeconds() - _tt);
-        hist_time += CycleTimer::currentSeconds() - _tt;
 
-        for (int f = 0; f < d.num_features; f++) {
+        for (int i = 0; i < best_features.size(); i++) {
+            int f = best_features[i];
+
+            double hist_start = CycleTimer::currentSeconds();
+            for (int r = 1 ; r < d.distributed_bin_dist.size(); r++) {
+                // Use feature_id as tag to differentiate between different features
+                // if we parallelize this across different features.
+                MPI_Recv(d.distributed_bin_dist[r]->head(f), d.distributed_num_bins[r][f] * d.num_classes, MPI_INT, r,
+                        0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            }
+            mpi_print("receiving bin dists taking: ", CycleTimer::currentSeconds() - _tt);
+            hist_time += CycleTimer::currentSeconds() - hist_start;
+
             auto curr_split_info = find_new_entropy_by_split_on_feature(d, f, curr_node);
             if (curr_split_info.min_entropy < min_entropy) {
                 min_entropy = curr_split_info.min_entropy;
@@ -354,16 +365,13 @@ SplitInfo DecisionTree::find_split(Dataset& d, vector<int>& indices, TreeNode* c
         return bcast_split_info({best_feature, min_entropy, best_split_thres, best_left_entropy, best_right_entropy});
     } else {
 		BinDist& bin_dist = curr_node->get_bin_dist();
-
-		MPI_Send(bin_dist.head(), bin_dist.size(), MPI_INT, 0,
-				0, MPI_COMM_WORLD);
-
-        /*
-        MPI_Request request;
-		MPI_Isend(bin_dist.head(), bin_dist.size(), MPI_INT, 0,
-				0, MPI_COMM_WORLD, &request);
-                */
-
+        for (int i = 0; i < best_features.size(); i++) {
+            int f = best_features[i];
+            if (f != INVALID_FEATURE) {
+                MPI_Send(bin_dist.head(f), d.num_bins[f] * d.num_classes, MPI_INT, 0,
+                        0, MPI_COMM_WORLD);
+            }
+        }
 		SplitInfo info;
 		MPI_Bcast(&info, 1, split_info_type(), 0, MPI_COMM_WORLD);
 		return info;
@@ -630,15 +638,19 @@ void DecisionTree::train(Dataset &d) {
     double update_end = CycleTimer::currentSeconds();
     update_time += (update_end - update_start);
 
-    mpi_print("building bins took: ", bin_time);
-    mpi_print("communicating histogram s", hist_time);
-    mpi_print("communicating updates ", update_time);
-    mpi_print("communicating stops ", stop_time);
-    mpi_print("communicating bcast ", bcast_time);
-    mpi_print("dbin scan ", scan_dbin_time);
-    mpi_print("accum counts ", accum_count_time);
-    mpi_print("outer loop total ", outer_loop_time);
-    mpi_print("total comm time ", hist_time + update_time + stop_time + bcast_time);
+    if (is_root()) {
+        mpi_print("building bins took: ", bin_time);
+        mpi_print("communicating histogram s", hist_time);
+        mpi_print("communicating updates ", update_time);
+        mpi_print("communicating stops ", stop_time);
+        mpi_print("communicating bcast ", bcast_time);
+        mpi_print("communicating votes ", voting_comm_time);
+        mpi_print("dbin scan ", scan_dbin_time);
+        mpi_print("accum counts ", accum_count_time);
+        mpi_print("outer loop total ", outer_loop_time);
+        mpi_print("total comm time ", hist_time + update_time + stop_time
+                + bcast_time + voting_comm_time);
+    }
 }
 
 int DecisionTree::test_single_sample(const Dataset& d, int sample_id) {

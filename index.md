@@ -12,8 +12,6 @@ Rui Peng (ruip@andrew.cmu.edu)
 * [link to checkpoint](checkpoint.html)
 
 
-## WORK IN PROGRESS STILL
-
 ## Summary
 
 Decision tree learning is one of the most popular supervised classification
@@ -24,6 +22,10 @@ Our hybrid, single machine implementation on GHC achieves 8 second training
 time for a [dataset](https://archive.ics.uci.edu/ml/datasets/HIGGS) with over 11 million samples, which is
 **60 times faster** than sci-kit learn and **24 times faster** than our optimized
 sequential version, with similar accuracy.
+
+
+![Summary](assets/runtime-summary.png)
+
 
 ## Challenges
 
@@ -133,7 +135,7 @@ million (query,url) pairs, each with 136 features and a label denoting
 the relevance of the query to the url.
 
 
-![OpenMP](assets/runtime-openmp.png)
+![Sequential](assets/runtime-sequential.png)
 
 
 Our final sequential version observes massive improvements over both sci-kit learn and
@@ -162,7 +164,9 @@ histograms and constructing child histograms requires scanning over
 the distributions of every histogram bin of every feature, this leads to a
 roughly balanced workload. The speedup graphs are shown below.
 
-Explain speedup graphs here.
+
+![OpenMP](assets/runtime-openmp.png)
+
 
 The speedup graph above at first displays near-linear speedup, especially for
 histogram construction across different features. The eventual
@@ -217,27 +221,28 @@ algorithm: build the initial histograms using multi-threaded CPU, and
 use both the GPU and CPU to accelerate child histogram computation (pseudo-code
 below):
 
-```
+<pre>
 gpu_features = get_gpu_features(features)
 cpu_features = get_cpu_features(features)
 gpu_result = []
 cpu_result = []
 
-gpu_compute_histograms(gpu_features, gpu_result)<<<kernel params>>>
+// Asynchronously compute on gpu
+kernel_gpu_compute_histograms(gpu_features, gpu_result)
 
-// Asynchronously compute on cpu.
 cpu_compute_histograms(cpu_features, cpu_result)
 
 cudaThreadSynchronize()
 
 merge_results(gpu_result, cpu_result)
-```
+</pre>
 
 
 Since the speedup graph for CPU suggests that our algorithm may be bandwidth
 bound, an implementation that uses both the memory bandwidth of GPU and CPU will
 likely be faster. Initial results show that hybrid reduces tree building time by 20%
-over GPU only when running on the [HIGGS Data Set](https://archive.ics.uci.edu/ml/datasets/HIGGS), which has 11 million samples. Both the GPU only and hybrid only implementation
+over GPU only when running on the [HIGGS Data Set](https://archive.ics.uci.edu/ml/datasets/HIGGS),
+which has 11 million samples. Both the GPU only and hybrid only implementation
 are improvmenets over a multi-core CPU implementation with 16 threads.
 We are working on optimizing this further with a better scheduling strategy.
 
@@ -252,7 +257,7 @@ We have two main goals to focus on:
    advantages of hybrid scheduling. Specifically, we are planning to reduce
    the memory movement between host and device that occurs when training.
 2. Improve the communication efficiency of our distributed implementation. We
-   found a
-   [paper](https://www.google.com/search?q=communication+efficient+decision+tree+learning&oq=communication+efficient+decision+tree+learning&aqs=chrome..69i57j69i60j0.4052j0j4&sourceid=chrome&ie=UTF-8) recently published at NIPS that will help us in this regard.
+   found a [paper](https://arxiv.org/abs/1611.01276) recently published at
+   NIPS that will help us in this regard.
    We hope that implementing their idea will allow us to scale beyond two
    machines.

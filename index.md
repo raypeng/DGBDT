@@ -216,10 +216,9 @@ the root by performing some local computation first to get this to scale beyond
 Another advantage of our histogram implementation is that the main bottleneck during
 tree construction is computing child histograms, which requires a lot of moving
 data around and incrementing counters in memory. This kind of computation lends
-itself well to a GPU implementation. The initial histogram construction phase,
-however, cannot be implemented efficiently on GPU due to the divergent exeuction
-pattern of the adaptive histogram building algorithm. This motivates a hybrid
-algorithm: build the initial histograms using multi-threaded CPU, and
+itself well to a GPU implementation. This also motivates a hybrid
+algorithm: build the initial histograms using multi-threaded CPU (getting
+GPU to work for adapative histogram building will take some work), and
 use both the GPU and CPU to accelerate child histogram computation (pseudo-code
 below):
 
@@ -243,7 +242,7 @@ bound, an implementation that uses both the memory bandwidth of GPU and CPU will
 likely be faster. Initial results show that hybrid reduces tree building time by 20%
 over GPU only when running on the [HIGGS Data Set](https://archive.ics.uci.edu/ml/datasets/HIGGS),
 which has 11 million samples. Both the GPU only and hybrid only implementation
-are improvmenets over a multi-core CPU implementation with 16 threads.
+are improvements over a multi-core CPU implementation with 16 threads.
 likely be faster. We are currently playing around with scheduling strategies (such
 as scheduling based on the size of the node we are woking with).
 Initial results show that hybrid reduces tree building time by 20%

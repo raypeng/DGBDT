@@ -22,7 +22,7 @@ by parallelizing training on a single machine (using multi-core CPU parallelism,
 across multiple machines in a cluster. Initial results show performance gains from all forms of parallelism.
 Our hybrid, single machine implementation on GHC achieves 8 second training
 time for a [dataset](https://archive.ics.uci.edu/ml/datasets/HIGGS) with over 11 million samples, which is
-60 times faster than sci-kit learn and 24 times faster than our optimized
+**60 times faster** than sci-kit learn and **24 times faster** than our optimized
 sequential version, with similar accuracy.
 
 ## Challenges
@@ -217,7 +217,7 @@ algorithm: build the initial histograms using multi-threaded CPU, and
 use both the GPU and CPU to accelerate child histogram computation (pseudo-code
 below):
 
-<pre>
+```
 gpu_features = get_gpu_features(features)
 cpu_features = get_cpu_features(features)
 gpu_result = []
@@ -231,7 +231,7 @@ cpu_compute_histograms(cpu_features, cpu_result)
 cudaThreadSynchronize()
 
 merge_results(gpu_result, cpu_result)
-</pre>
+```
 
 
 Since the speedup graph for CPU suggests that our algorithm may be bandwidth

@@ -1,8 +1,8 @@
 #CXXFLAGS='-std=c++11 -MMD -MP'
 
 TARGET = main
-OBJS = main.o decision_tree.o dataset.o mpi_util.o bindist.o util.o
-DFILES = main.d decision_tree.d dataset.d mpi_util.d bindist.d util.d
+OBJS = main.o decision_tree.o dataset.o mpi_util.o bindist.o util.o heap.o
+DFILES = main.d decision_tree.d dataset.d mpi_util.d bindist.d util.d heap.d
 
 CC = mpic++
 CXXFLAGS = -std=c++11 -fopenmp -g -O3 -I/opt/openmpi/include/ -Wl,-rpath,/opt/gcc/4.9.2/lib64

@@ -18,7 +18,7 @@
 
 #define INFO_GAIN_THRESHOLD 1e-3
 
-#define NUM_VOTES
+#define NUM_VOTES 3
 
 using namespace std;
 
@@ -29,6 +29,76 @@ static double bcast_time = 0;
 static double outer_loop_time = 0;
 static double accum_count_time = 0;
 static double scan_dbin_time = 0;
+
+void DecisionTree::collect_top_k_features(const Dataset& d, TreeNode* curr_node,
+    Heap& h) {
+
+    BinDist& bin_dist = curr_node->get_bin_dist();
+    for (int f = 0; f < d.num_features; f++) {
+        int N = curr_node->right - curr_node->left;
+        int num_bins = d.num_bins[f];
+        const vector<int>& bins = d.bins[f];
+        vector<int> bin_counts(num_bins, 0);
+
+        for (int i = 0; i < num_bins; i++) {
+            int count = 0;
+            for (int j = 0; j < d.num_classes; j++) {
+                count += bin_dist.get(f,i,j);
+
+            }
+            bin_counts[i] = count;
+        }
+        vector<int> left_dist(d.num_classes,0);
+        vector<int>& class_dist = curr_node->get_class_dist();
+        const vector<float>& bin_edges = d.bin_ends[f];
+
+        int total_samples_left = 0;
+        float min_entropy = numeric_limits<float>::max();
+
+        for (int split_index = 0; split_index < num_bins - 1; split_index++) {
+            while (split_index < num_bins - 1 && bin_counts[split_index] == 0) {
+                split_index++;
+            }
+
+            if (split_index == num_bins - 1) {
+                break;
+            }
+
+            add_vector(left_dist, left_dist, bin_dist.head(f,split_index));
+
+            total_samples_left += bin_counts[split_index];
+            int total_samples_right = N - total_samples_left;
+
+            float left_entropy = 0, right_entropy = 0;
+            for (int c = 0; c < d.num_classes; c++) {
+                int left_samples_per_class = left_dist[c];
+                if (left_samples_per_class != 0) {
+                    float left_frac_yes = 1. * left_samples_per_class / total_samples_left;
+                    left_entropy -= left_frac_yes * log2(left_frac_yes);
+                }
+                int right_samples_per_class = class_dist[c] - left_samples_per_class;
+                if (right_samples_per_class != 0) {
+                    float right_frac_yes = 1. * right_samples_per_class / total_samples_right;
+                    right_entropy -= right_frac_yes * log2(right_frac_yes);
+                }
+            }
+            float curr_entropy = 0;
+            if (total_samples_left != 0) {
+                curr_entropy += (1. * total_samples_left / N) * left_entropy;
+           }
+            if (total_samples_right != 0) {
+                curr_entropy += (1. * total_samples_right / N) * right_entropy;
+            }
+            if (curr_entropy < min_entropy) {
+                min_entropy = curr_entropy;
+            }
+        }
+
+        if (min_entropy < h.max()) {
+            h.insert(f, min_entropy);
+        }
+    }
+}
 
 SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(Dataset& d, int feature_id, TreeNode* curr_node) {
     // entropy before split does not affect comparing info gain values across different features to split
@@ -199,7 +269,12 @@ SplitInfo DecisionTree::find_split(Dataset& d, vector<int>& indices, TreeNode* c
 
 	mpi_print("searching for feature to split");
 
-    if (mpi_rank() == 0) {
+    mpi_print("searching for local top k");
+    Heap h(NUM_VOTES);
+    collect_top_k_features(d, curr_node, h);
+    mpi_print("found local top k: ", h.get_ids());
+
+    if (is_root()) {
         int best_feature = -1;
         float min_entropy = numeric_limits<float>::max();
         float best_left_entropy = -1, best_right_entropy = -1, best_split_thres = -1;

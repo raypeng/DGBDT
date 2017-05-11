@@ -7,6 +7,7 @@
 
 #include "tree.h"
 #include "dataset.h"
+#include "heap.h"
 
 #define MAX_DEPTH 100000
 
@@ -24,7 +25,8 @@ private:
     SplitInfo find_split(Dataset& d, vector<int>& indices, TreeNode* curr_node);
     pair<bool, NodeStatus> should_stop(TreeNode* curr);
     int split_data(vector<int>& indices, const Dataset& d, TreeNode* curr_node);
-
+    void collect_top_k_features(const Dataset& d, TreeNode* curr_node,
+        Heap& h);
 public:
     // potentially more hyperparams
     DecisionTree(int max_num_leaves_, int max_depth_ = MAX_DEPTH, int min_node_size_ = 0);

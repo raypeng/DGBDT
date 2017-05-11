@@ -20,9 +20,10 @@ Decision tree learning is one of the most popular supervised classification
 algorithms used in machine learning. In our project, we attempted to optimize decision tree learning
 by parallelizing training on a single machine (using multi-core CPU parallelism, GPU parallelism, and a hybrid of the two) and
 across multiple machines in a cluster. Initial results show performance gains from all forms of parallelism.
-Our hybrid, single machine implementation on GHC achieves an under 9 second training
-time for a dataset with over 11 million samples, which is
-53 times faster than sci-kit learn with similar accuracy.
+Our hybrid, single machine implementation on GHC achieves 8 second training
+time for a [dataset](https://archive.ics.uci.edu/ml/datasets/HIGGS) with over 11 million samples, which is
+60 times faster than sci-kit learn and 24 times faster than our optimized
+sequential version, with similar accuracy.
 
 ## Challenges
 
@@ -135,6 +136,9 @@ the relevance of the query to the url.
 ![OpenMP](assets/runtime-openmp.png)
 
 
+Our final sequential version observes massive improvements over both sci-kit learn and
+the traditional decision tree learning algorithm. This is the optimized sequential version
+we will use as a baseline later.
 Note that although our accuracy has also decreased slightly due to the approximate
 nature of our histogram binning, the reduction is small (on the order of 0.1)
 and not much of a concern if we used our algorithm in an ensemble method (which
@@ -146,8 +150,9 @@ frameworks as long as our accuracy is competitive.
 ## Parallelizing with Multiple CPU Cores
 
 As mentioned previously parallelizing across tree nodes leads to the problem of
-an imbalanced workload. After profiling our code, we determined two
-computationally expensive areas:
+an imbalanced workload. So we want to instaed parallelize finding a feature
+to split on within a singe node. After profiling our code, we determined two
+computationally expensive areas that might be opportunities for parallelism:
 
 1. Initial building of histograms.
 2. Constructing child histograms from each node.
@@ -160,9 +165,11 @@ roughly balanced workload. The speedup graphs are shown below.
 Explain speedup graphs here.
 
 The speedup graph above at first displays near-linear speedup, especially for
-histogram construction across different features. We suspect that the eventual
-dissipation of speedup is due to memory bandwidth issues since constructing
-child histograms has very little arithmetic intensity.
+histogram construction across different features. The eventual
+dissipation of speedup is very likely due to memory bandwidth issues, since
+histogram construction is trivially parallelizable across features and needs
+minimal syncrhonization. We aim to solve this
+problem through using the GPU and hybrid parallelism mentioned later.
 
 ## Distributing Training with Multiple Machines
 
@@ -173,14 +180,17 @@ their partition of the dataset, drastically reducing the communication
 requirements.
 
 Our distributed training algorithm is basically to assign each machine on latedays
-to have a partition of the dataset, and construct local histograms. Whenever
-we decide how to split a tree node, the machines send their histograms to the
-root machine, which merges them together to search for a split point. The root
-machine then sends the split point to the other machines, and each machine
+to have a partition of the dataset, and construct local histograms. By
+doing this in a data parallel fashion, we should gain great speedups for
+histogram construction and hopefully good performance gains as well
+in the tree building phase (where communication and synchronization costs might dominate).
+Whenever we decide how to split a tree node, the workers send their histograms to the
+master, which merges them together to search for a split point. The master
+then sends the split point to the workers, and each worker
 builds local child histograms individually.
 Initial results, however, show that communication efficiency
-is still a problem. The experiement below was run on the latedays cluster on a
-varying number of machines.
+is still a problem. The experiment below was run on the latedays cluster on a
+varying number of workers/machines.
 
 
 ![OpenMPI](assets/runtime-openmpi.png)
@@ -207,8 +217,7 @@ algorithm: build the initial histograms using multi-threaded CPU, and
 use both the GPU and CPU to accelerate child histogram computation (pseudo-code
 below):
 
-```
-
+<pre>
 gpu_features = get_gpu_features(features)
 cpu_features = get_cpu_features(features)
 gpu_result = []
@@ -222,15 +231,15 @@ cpu_compute_histograms(cpu_features, cpu_result)
 cudaThreadSynchronize()
 
 merge_results(gpu_result, cpu_result)
+</pre>
 
-```
 
 Since the speedup graph for CPU suggests that our algorithm may be bandwidth
 bound, an implementation that uses both the memory bandwidth of GPU and CPU will
 likely be faster. Initial results show that hybrid reduces tree building time by 20%
-over GPU only when running on a massive dataset with 11 million samples, with a CPU
-only implementation being slower than both, but we are working on
-optimizing this further.
+over GPU only when running on the [HIGGS Data Set](https://archive.ics.uci.edu/ml/datasets/HIGGS), which has 11 million samples. Both the GPU only and hybrid only implementation
+are improvmenets over a multi-core CPU implementation with 16 threads.
+We are working on optimizing this further with a better scheduling strategy.
 
 ## Further Work
 

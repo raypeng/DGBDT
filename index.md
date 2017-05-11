@@ -192,7 +192,8 @@ communication during tree building is expensive, since the root
 machine must communicate with all other machines on every node split for every
 feature. We plan to further optimize our distributed training
 code by reducing the amount of information each machine needs to send to
-the root by performing some local computation first.
+the root by performing some local computation first to get this to scale beyond
+2 nodes.
 
 ## GPU and Hybrid Implementation
 

@@ -213,10 +213,10 @@ cpu_features = get_cpu_features(features)
 gpu_result = []
 cpu_result = []
 
-gpu_compute_histograms_for_features(gpu_features, gpu_result)<<<kernel params>>>
+gpu_compute_histograms(gpu_features, gpu_result)<<<kernel params>>>
 
 // Asynchronously compute on cpu.
-cpu_compute_histograms_for_features(cpu_features, cpu_result)
+cpu_compute_histograms(cpu_features, cpu_result)
 
 cudaThreadSynchronize()
 

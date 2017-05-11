@@ -20,7 +20,7 @@ Decision tree learning is one of the most popular supervised classification
 algorithms used in machine learning. In our project, we attempted to optimize decision tree learning
 by parallelizing training on a single machine (using multi-core CPU parallelism, GPU parallelism, and a hybrid of the two) and
 across multiple machines in a cluster. Initial results show performance gains from all forms of parallelism.
-In particular, our hybrid, single machine implementation on GHC achieves 8 second training
+In particular, our hybrid, single machine implementation on GHC achieves an 8 second training
 time for a [dataset](https://archive.ics.uci.edu/ml/datasets/HIGGS) with over 11 million samples, which is
 **60 times faster** than sci-kit learn and **24 times faster** than our optimized
 sequential version, with similar accuracy.

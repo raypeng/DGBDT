@@ -55,8 +55,8 @@ The standard sequential implementation for decision tree learning looks
 something like this:
 
 ```
-while (!queue.empty()) {
-  node = queue.remove_head()
+while (!work_queue.empty()) {
+  node = work_queue.remove_head()
 
   if (node.is_terminal()) continue
 
@@ -72,8 +72,8 @@ while (!queue.empty()) {
 
   left,right = split(node, best_split_point)
 
-  queue.add(left)
-  queue.add(right)
+  work_queue.add(left)
+  work_queue.add(right)
 
 }
 ```
@@ -90,8 +90,8 @@ of the data. Using this algorithm, training roughly looks like this:
 ```
 build_histograms()
 
-while (!queue.empty()) {
-  node = queue.remove_head()
+while (!work_queue.empty()) {
+  node = work_queue.remove_head()
 
   if (node.is_terminal()) continue
 
@@ -108,8 +108,8 @@ while (!queue.empty()) {
   left.compute_histograms(node.histogram, best_split_point)
   right.compute_histograms(node.histogram, best_split_point)
 
-  queue.add(left)
-  queue.add(right)
+  work_queue.add(left)
+  work_queue.add(right)
 
 }
 ```
@@ -131,7 +131,9 @@ Rank](https://www.microsoft.com/en-us/research/project/mslr/) dataset, which con
 million (query,url) pairs, each with 136 features and a label denoting
 the relevance of the query to the url.
 
-GRAPH HERE
+
+![OpenMP](assets/runtime-openmp.png)
+
 
 Note that although our accuracy has decreased slightly due to the approximate
 nature of our histogram binning, the reduction is small
@@ -176,7 +178,9 @@ Initial results, however, show that communication efficiency
 is still a problem. The experiement below was run on the latedays cluster on a
 varying number of machines.
 
-"graph here"
+
+![OpenMPI](assets/runtime-openmpi.png)
+
 
 As you can see from the graph, histogram construction scales well due to the
 trivial communication requirements necessary for it. On the other hand,
@@ -205,7 +209,7 @@ We have two main goals to focus on:
    the memory movement between host and device that occurs when training.
 2. Improve the communication efficiency of our distributed implementation. We
    found a
-   [paper](https://www.google.com/search?q=communication+efficient+decision+tree+learning&oq=communication+efficient+decision+tree+learning&aqs=chrome..69i57j69i60j0.4052j0j4&sourceid=chrome&ie=UTF-8) recently published at NIPs that will help us in this regard.
+   [paper](https://www.google.com/search?q=communication+efficient+decision+tree+learning&oq=communication+efficient+decision+tree+learning&aqs=chrome..69i57j69i60j0.4052j0j4&sourceid=chrome&ie=UTF-8) recently published at NIPS that will help us in this regard.
    We hope that implementing their idea will allow us to scale beyond two
    machines.
 3. If we have time, combine our distributed implementation with our hybrid

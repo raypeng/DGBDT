@@ -2,88 +2,213 @@
 layout: default
 ---
 
-# Distributed Gradient Boosted Decision Tree on GPU
+# Distributed Decision Trees with Heterogeneous Parallelism
 
 Alex Xiao (axiao@andrew.cmu.edu)
 
 Rui Peng (ruip@andrew.cmu.edu)
 
+* [link to proposal](proposal.html)
+* [link to checkpoint](checkpoint.html)
+
+
+## WORK IN PROGRESS STILL
+
 ## Summary
 
-We are going to implement an optimized distributed implementation of training gradient boosted  decision trees. We plan to use OpenMPI for communication between nodes, and CUDA to parallelize each individual node’s training on GPU. If time allows, we also will attempt to implement a hybrid implementation of parallel decision tree learning that makes use of both CPUs and GPUs.
+Decision tree learning is one of the most popular supervised classification
+algorithms used in machine learning. In our project, we attempted to optimize decision tree learning
+by parallelizing training on a single machine (using multi-core CPU parallelism, GPU parallelism, and a hybrid of the two) and
+across multiple machines in a cluster. Initial results show performance gains from all forms of parallelism.
+Our hybrid, single machine implementation on GHC achieves an under 9 second training
+time for a dataset with over 11 million samples, which is
+53 times faster than sci-kit learn with similar accuracy.
 
+## Challenges
 
+* Building an optimized sequential implementation of decision tree learning to use as
+  a baseline requires some work, since the default decision tree training algorithm
+  is slow and requires repeatedly sorting the dataset, which can be massive.
 
-## Background
+* Parallelizing training with a machine on CPU cores is also tricky, since the
+  shape of the decision tree is irregular and determined at runtime, making
+  static partitioning of the workload across tree nodes ineffective.
 
-Decision trees are a common model used in machine learning and data mining to approximate regression or classification functions. They take an input with a set of features and predict the corresponding label or value by using the nodes of the tree to split on the features. For example, below is an example of a decision tree used to assign a prediction score to whether or not a person likes computer games.
+* Distributing training across machines in a cluster requires significant
+  communication between machines, since the decision on which feature to split
+  on requires a global view of the dataset.
+
+* The standard algorithm for decision tree learning does not translate well to GPU or
+  hybrid implementations. To quote the creator of XGBoost, a widely used decision tree
+  boosting framework: “The execution pattern of decision tree training relies heavily
+  on conditional branches and thus has high ratio of divergent execution,
+  which makes the algorithm have less benefit from SPMD architecture”. Our
+  implementation of decision tree learning must not have the same problems.
+
+* Scheduling GPU and CPU computation on a heterogenous machine is difficult,
+  since it is crucial to identify scenarios in which one is preferred over
+  the other or if the overhead of using both is worth the trouble.
+
+## Optimizing a Sequential Implementation
+
+The standard sequential implementation for decision tree learning looks
+something like this:
 
 ```
-![Image from XGBOOST](https://raw.githubusercontent.com/dmlc/web-data/master/xgboost/model/cart.png)
+<pre>
+while (!queue.empty()) {
+  node = queue.remove_head()
+
+  if (node.is_terminal()) continue
+
+  best_split_point = nil
+
+  for f in features {
+    sort(node.data, comparator = f)
+
+    for d in node.data {
+      check_best_split_point(best_split_point,f,d)
+    }
+  }
+
+  left,right = split(node, best_split_point)
+
+  queue.add(left)
+  queue.add(right)
+
+}
+</pre>
 ```
 
-Ensemble learning is a machine learning technique to produce a prediction model from a collection of weak learners. The idea is that as long as the weak learner can do better than random guessing on average, then an ensemble of weak learners will have higher predictive performance than any individual weak learner. Gradient boosting achieves this by iteratively adding weak learners into the ensemble. On each iteration, after constructing a weak learner and adding it to the ensemble, the boosting algorithm will increase the weight of training data that the current model incorrectly predicts so that the next iteration will to try to “nudge” the constructed weak learner to address the current model’s weakness. Gradient boosting sets this up via an optimization problem where it uses gradient descent to minimize some loss function that captures the current ensemble’s performance when constructing new weak learners. 
+Since decision trees are created with splitting on feature values, sorting the
+data is required to efficiently compute distribution statistics of
+the data while scanning through data in the inner loop. The repeated sorting of
+data makes this algorithm slow.
 
-Although gradient boosting does not have opportunities for parallelism, being an inherently sequential process, parallelization opportunities exist in training an individual decision tree. Specifically, the main computation required when training a decision tree is to determine which feature the next node should split on. There are different algorithms for doing this, but this often requires comparing some kind of objective function across all the features, which should have good opportunities for parallelism since multiple threads can search for the best feature to split on simultaneously. Our goal in this project will be to construct an algorithm that performs this efficiently across different nodes in a cluster with GPUs to accelerate the training process. If possible, we would also like to run our algorithm efficiently on hybrid architectures and make use of both CPUs and GPUs.
+To improve upon this, we implemented an algorithm that first builds a
+histogram of every feature that roughly captures the distribution statistics
+of the data. Using this algorithm, training roughly looks like this:
+
+```
+build_histograms()
+
+while (!queue.empty()) {
+  node = queue.remove_head()
+
+  if (node.is_terminal()) continue
+
+  best_split_point = nil
+
+  for f in features {
+    for bin in node.histogram(f) {
+      check_best_split_point(best_split_point,f,bin)
+    }
+  }
+
+  left,right = split(node, best_split_point)
+
+  left.compute_histograms(node.histogram, best_split_point)
+  right.compute_histograms(node.histogram, best_split_point)
+
+  queue.add(left)
+  queue.add(right)
+
+}
+```
+
+This eliminates sorting the data and also scans over histogram
+bins instead of data points. Since number of bins (set to a constant value like
+255) <<<< number of datapoints, this provides a big performance gain. The main
+computation is now offloaded to building the initial histograms and constructing new
+histograms from old histograms. To do this efficiently, we use an adaptive
+histogram construction algorithm from this
+[paper](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/boosttreerank.pdf) and compute the left/right
+child histograms by first computing the smaller one, then performing histogram
+subtraction to get the larger one.
+
+Below are performance and accuracy comparisons between our implementation of the
+above two algorithms and the popular decision tree learning framework sci-kit learn.
+We benchmarked on the [Microsoft Learn to
+Rank](https://www.microsoft.com/en-us/research/project/mslr/) dataset, which contains 2
+million (query,url) pairs, each with 136 features and a label denoting
+the relevance of the query to the url.
+
+![OpenMP](assets/runtime-openmp.png)
+
+Note that although our accuracy has decreased slightly due to the approximate
+nature of our histogram binning, the reduction is small
+and not much of a concern if we used our algorithm in an ensemble method (which
+people often do with decision trees). Furthermore, since our focus is on
+performance, we decided to not spend too
+much time on sophisticated splitting heuristics and pruning techniques that are found in mature
+frameworks as long as our accuracy is competitive.
+
+## Parallelizing with Multiple CPU Cores
+
+As mentioned previously parallelizing across tree nodes leads to the problem of
+an imbalanced workload. After profiling our code, we determined two
+computationally expensive areas:
+
+1. Initial building of histograms.
+2. Constructing child histograms from each node.
+
+We used OpenMP to parallelize these two areas across features. Since building
+histograms and constructing child histograms requires scanning over
+the distributions of every histogram bin of every feature, this leads to a
+roughly balanced workload. The speedup graphs are shown below.
 
 
+Explain speedup graphs here.
 
-## The Challenge
+## Distributing Training with Multiple Machines
 
-We foresee two main challenges with distributed decision tree training.
+A major concern we had initially, communication efficiency of distributed
+training, is somewhat alleviated by our histogram representation of the dataset.
+This allows multiple machines to communicate with histograms instead of
+their partition of the dataset, drastically reducing the communication
+requirements.
 
-* Parallelizing the training algorithm across nodes in a cluster will likely require significant communication between machines as the decision on which feature to split on requires global information, yet each machine only has a local view of the data. Addressing this problem might require some kind of efficient encoding scheme or an algorithm that tries to maximize locality in each node.
-* Most frameworks for decision tree learning support parallelism across CPU’s as their primary parallelism method. Only recently have these frameworks started to develop GPU implementations of decision tree training. The reasoning for this is that the algorithms they use do not translate well to GPU. To quote the creator of [XGBoost](https://github.com/dmlc/xgboost), a widely used decision tree learning framework: “The execution pattern of decision tree training relies heavily on conditional branches and thus has high ratio of divergent execution, which makes the algorithm have less benefit from SPMD architecture”.
+Our distributed training algorithm is basically to assign each machine on latedays
+to have a partition of the dataset, and construct local histograms. Whenever
+we decide how to split a tree node, the machines send their histograms to the
+root machine, which merges them together to search for a split point. The root
+machine then sends the split point to the other machines, and each machine
+builds local child histograms individually.
+Initial results, however, show that communication efficiency
+is still a problem. The experiement below was run on the latedays cluster on a
+varying number of machines.
 
-We plan to address these 2 challenges by utilizing techniques we have learned in 15-418 as well as utilizing ideas in current literature for parallel decision tree learning.
+![OpenMPI](assets/runtime-openmpi.png)
 
+As you can see from the graph, histogram construction scales well due to the
+trivial communication requirements necessary for it. On the other hand,
+communication during tree building is expensive, since the root
+machine must communicate with all other machines on every node split for every
+feature. We plan to further optimize our distributed training
+code by reducing the amount of information each machine needs to send to
+the root by performing some local computation first.
 
+## GPU and Hybrid Implementation
 
-## Resources
+Another advantage of our histogram implementation is that the main bottleneck during
+tree construction is computing child histograms, which requires a lot of moving
+data around and incrementing counters in memory. This kind of computation lends
+itself well to a GPU implementation,
 
-We plan to develop and test our code on latedays cluster because we need a good distributed environment that has GPUs.
+## Further Work
 
-We will start our implementation from scratch to have the fullest flexibility while we explore the problem. Should we ultimately decide to develop a CPU-GPU hybrid execution heterogeneous version, we might incorporate the [StarPU](http://starpu.gforge.inria.fr/) task programming library in our code.
+We have two main goals to focus on:
 
-
-
-## Goals and Deliverables
-
-Baseline: a sequential CPU implementation with naive communication scheme of the algorithm on distributed setting.
-
-We will measure the performance of various implementations as the speed up versus the baseline and report the speedup under different settings.
-
-#### Plan to achieve: 
-
-* Significant speedup of parallel GPU implementation and efficient communication scheme over baseline version
-
-#### Hope to achieve:
-
-* Further speedup versus baseline version with an algorithm leveraging CPU+GPU hybrid execution architecture
-
-
-
-## Platform
-
-C++/CUDA, Linux.
-
-We choose C++/CUDA on Linux mainly because we are most familiar with the platform and it should be the best playground to make use of MPI and CUDA easily. Latedays also has both CPUs and GPUs, allowing us to attempt algorithms that run heterogenous architectures.
-
-
-
-## Schedule
-
-April 10 - April 16  	
-Research and brainstorm potential parallel algorithms, setup codebase, start working on distributed sequential version as a reference baseline.
-
-April 17 - April 23
-Complete distributed sequential version, measure accuracy and performance, start implementing parallel GPU version.
-
-April 24 - April 30
-Work on GPU version, measure accuracy and performance, optimize as necessary.
-
-May 1 - May 7
-If finished with GPU version, start implementation of CPU+GPU hybrid algorithm. Start performing measurements needed to analyze speedup and training accuracy.
-
-May 8 - May 12
-Wrap up, perform all measurements needed to analyze speedup and training accuracy, prepare presentation.
+1. Improve our GPU implementation and hybrid scheduling. Currently the GPU
+   implementation is pretty simple, which might make hybrid scheduling
+   not as effective as it could be. We would
+   like to look into further improving the GPU implemntation to show the
+   advantages of hybrid scheduling. Specifically, we are planning to reduce
+   the memory movement between host and device that occurs when training.
+2. Improve the communication efficiency of our distributed implementation. We
+   found a
+   [paper](https://www.google.com/search?q=communication+efficient+decision+tree+learning&oq=communication+efficient+decision+tree+learning&aqs=chrome..69i57j69i60j0.4052j0j4&sourceid=chrome&ie=UTF-8) recently published at NIPS that will help us in this regard.
+   We hope that implementing their idea will allow us to scale beyond two
+   machines.
+3. If we have time, combine our distributed implementation with our hybrid
+   implementation and benchmark it.

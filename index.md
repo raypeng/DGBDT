@@ -20,7 +20,7 @@ Decision tree learning is one of the most popular supervised classification
 algorithms used in machine learning. In our project, we attempted to optimize decision tree learning
 by parallelizing training on a single machine (using multi-core CPU parallelism, GPU parallelism, and a hybrid of the two) and
 across multiple machines in a cluster. Initial results show performance gains from all forms of parallelism.
-Our hybrid, single machine implementation on GHC achieves 8 second training
+In particular, our hybrid, single machine implementation on GHC achieves 8 second training
 time for a [dataset](https://archive.ics.uci.edu/ml/datasets/HIGGS) with over 11 million samples, which is
 **60 times faster** than sci-kit learn and **24 times faster** than our optimized
 sequential version, with similar accuracy.
@@ -218,8 +218,7 @@ use both the GPU and CPU to accelerate child histogram computation (pseudo-code
 below):
 
 ```
-gpu_features = get_gpu_features(features)
-cpu_features = get_cpu_features(features)
+gpu_features,cpu_features = assign_features(features)
 gpu_result = []
 cpu_result = []
 
@@ -233,12 +232,13 @@ cudaThreadSynchronize()
 merge_results(gpu_result, cpu_result)
 ```
 
-
 Since the speedup graph for CPU suggests that our algorithm may be bandwidth
 bound, an implementation that uses both the memory bandwidth of GPU and CPU will
-likely be faster. Initial results show that hybrid reduces tree building time by 20%
-over GPU only when running on the [HIGGS Data Set](https://archive.ics.uci.edu/ml/datasets/HIGGS), which has 11 million samples. Both the GPU only and hybrid only implementation
-are improvmenets over a multi-core CPU implementation with 16 threads.
+likely be faster. We are currently playing around with scheduling strategies (such
+as scheduling based on the size of the node we are woking with).
+Initial results show that hybrid reduces tree building time by 20%
+over GPU only when running on the [HIGGS Data Set](https://archive.ics.uci.edu/ml/datasets/HIGGS), which has 11 million samples. Both the GPU only and hybrid only implementations
+are improvements over a multi-core CPU implementation with 16 threads.
 We are working on optimizing this further with a better scheduling strategy.
 
 ## Further Work
@@ -248,7 +248,7 @@ We have two main goals to focus on:
 1. Improve our GPU implementation and hybrid scheduling. Currently the GPU
    implementation is pretty simple, which might make hybrid scheduling
    not as effective as it could be. We would
-   like to look into further improving the GPU implemntation to show the
+   like to look into further improving the GPU implementation to show the
    advantages of hybrid scheduling. Specifically, we are planning to reduce
    the memory movement between host and device that occurs when training.
 2. Improve the communication efficiency of our distributed implementation. We

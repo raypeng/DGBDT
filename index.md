@@ -132,7 +132,7 @@ above two algorithms and the popular decision tree learning framework sci-kit le
 We benchmarked on the [Microsoft Learn to
 Rank](https://www.microsoft.com/en-us/research/project/mslr/) dataset, which contains 2
 million (query,url) pairs, each with 136 features and a label denoting
-the relevance of the query to the url.
+the relevance of the query to the url. Experiments were performed on GHC.
 
 
 ![Sequential](assets/runtime-sequential.png)
@@ -162,7 +162,8 @@ computationally expensive areas that might be opportunities for parallelism:
 We used OpenMP to parallelize these two areas across features. Since building
 histograms and constructing child histograms requires scanning over
 the distributions of every histogram bin of every feature, this leads to a
-roughly balanced workload. The speedup graphs are shown below.
+roughly balanced workload. The speedup graphs are shown below (experiments on
+GHC).
 
 
 ![OpenMP](assets/runtime-openmp.png)

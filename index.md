@@ -10,6 +10,7 @@ Rui Peng (ruip@andrew.cmu.edu)
 
 * [link to proposal](proposal.html)
 * [link to checkpoint](checkpoint.html)
+* [link to code](https://github.com/raypeng/DGBDT)
 
 
 ## Summary

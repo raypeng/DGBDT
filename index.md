@@ -154,7 +154,7 @@ frameworks as long as our accuracy is competitive.
 
 As mentioned previously parallelizing across tree nodes leads to the problem of
 an imbalanced workload. So we want to instaed parallelize finding a feature
-to split on within a singe node. After profiling our code, we determined two
+to split on within a single node. After profiling our code, we determined two
 computationally expensive areas that might be opportunities for parallelism:
 
 1. Initial building of histograms.

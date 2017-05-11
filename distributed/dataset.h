@@ -33,13 +33,11 @@ struct DataInfo {
 
 struct DistributedBin {
     int bin;
-    bool bin_start;
     int rank;
     float v;
 
-    DistributedBin(int bin_, bool bin_start_, int rank_, float v_) {
+    DistributedBin(int bin_, int rank_, float v_) {
         bin = bin_;
-        bin_start = bin_start_;
         rank = rank_;
         v = v_;
     }
@@ -65,7 +63,6 @@ struct Dataset {
     // number of bins for each feature
     vector<int> num_bins;
 
-    vector<vector<float>> bin_starts;
 
     // bin edges to act as split indices for each feature
     vector<vector<float>> bin_ends;
@@ -92,7 +89,6 @@ struct Dataset {
         BinDist& bin_dist = root->setup_bin_dist(num_features, max_bins_, num_classes);
 
         bins.resize(num_features);
-        bin_starts.resize(num_features);
         bin_ends.resize(num_features);
         num_bins.resize(num_features);
 
@@ -126,11 +122,9 @@ struct Dataset {
 
             vector<int>& f_bins = bins[f];
             vector<float>& f_bin_ends = bin_ends[f];
-            vector<float>& f_bin_starts = bin_starts[f];
 
             f_bins.resize(num_samples);
             f_bin_ends.resize(max_bins);
-            f_bin_starts.resize(max_bins);
 
             float bin_size = START_BIN_SIZE;
 
@@ -139,7 +133,6 @@ struct Dataset {
                 int curr_bin = 0;
                 float bin_left = data_infos[0].v;
                 float prev_v = bin_left;
-                f_bin_starts[curr_bin] = bin_left;
 
                 int first_index = data_infos[0].index;
                 f_bins[first_index] = 0;
@@ -163,7 +156,6 @@ struct Dataset {
                         f_bin_ends[curr_bin] = prev_v;
                         bin_left = v;
                         curr_bin++;
-                        f_bin_starts[curr_bin] = bin_left;
                     }
 
                     f_bins[data_info.index] = curr_bin;
@@ -180,7 +172,6 @@ struct Dataset {
                     int n = curr_bin + 1;
                     num_bins[f] = n;
                     f_bin_ends.resize(n);
-                    f_bin_starts.resize(n);
 
                     break;
                 }
@@ -192,7 +183,6 @@ struct Dataset {
         if (distributed) {
 
             int num_bin_tag = 0;
-            int bin_start_tag = 1;
             int bin_end_tag = 2;
 
 
@@ -219,11 +209,9 @@ struct Dataset {
                     int nbins = distributed_num_bins[0][f];
 
                     for (int i = 0; i < nbins; i++) {
-                        bins.push_back(DistributedBin(i, true, 0, bin_starts[f][i]));
-                        bins.push_back(DistributedBin(i, false, 0, bin_ends[f][i]));
+                        bins.push_back(DistributedBin(i, 0, bin_ends[f][i]));
                     }
 
-                    vector<float> remote_bin_starts(max_bins);
                     vector<float> remote_bin_ends(max_bins);
 
                     for (int r = 1; r < mpi_world_size(); r++) {
@@ -231,15 +219,12 @@ struct Dataset {
 
                         // TODO: change these tags if we use asyncrhonous receives.
                         //mpi_print("receiving starts for feature: ", f);
-                        MPI_Recv(remote_bin_starts.data(), nbins, MPI_FLOAT, r, MPI_ANY_TAG,
-                                MPI_COMM_WORLD, MPI_STATUS_IGNORE);
                         //mpi_print("receiving ends for feature: ", f);
                         MPI_Recv(remote_bin_ends.data(), nbins, MPI_FLOAT, r, MPI_ANY_TAG,
                                 MPI_COMM_WORLD, MPI_STATUS_IGNORE);
 
                         for (int i = 0; i < nbins; i++) {
-                            bins.push_back(DistributedBin(i, true, r, remote_bin_starts[i]));
-                            bins.push_back(DistributedBin(i, false, r, remote_bin_ends[i]));
+                            bins.push_back(DistributedBin(i, r, remote_bin_ends[i]));
                         }
                     }
                     sort(bins.begin(), bins.end(), cmp_bin);
@@ -248,7 +233,6 @@ struct Dataset {
                 MPI_Send(num_bins.data(), num_features, MPI_INT, 0, num_bin_tag, MPI_COMM_WORLD);
 
                 for (int f = 0; f < num_features; f++) {
-                    MPI_Send(bin_starts[f].data(), num_bins[f], MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
                     MPI_Send(bin_ends[f].data(), num_bins[f], MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
                 }
             }

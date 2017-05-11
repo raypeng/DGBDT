@@ -18,7 +18,17 @@
 
 #define INFO_GAIN_THRESHOLD 1e-3
 
+#define NUM_VOTES
+
 using namespace std;
+
+static double update_time = 0;
+static double hist_time = 0;
+static double stop_time = 0;
+static double bcast_time = 0;
+static double outer_loop_time = 0;
+static double accum_count_time = 0;
+static double scan_dbin_time = 0;
 
 SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(Dataset& d, int feature_id, TreeNode* curr_node) {
     // entropy before split does not affect comparing info gain values across different features to split
@@ -32,6 +42,7 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(Dataset& d, int fea
 
     // Accumulate total sample counts, individual bin sample counts,
     // and class distribution across all nodes.
+    double accum_start = CycleTimer::currentSeconds();
     int N = 0;
     vector<vector<int>> bin_counts(mpi_world_size(), vector<int>(d.max_bins));
     vector<int> class_dist(d.num_classes);
@@ -52,6 +63,8 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(Dataset& d, int fea
             N += count;
         }
     }
+    double accum_end = CycleTimer::currentSeconds();
+    accum_count_time += (accum_end - accum_start);
 
     _t += CycleTimer::currentSeconds();
     _t2 -= CycleTimer::currentSeconds();
@@ -63,7 +76,8 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(Dataset& d, int fea
     int total_samples_left = 0;
     float best_left_entropy = -1, best_right_entropy = -1, best_split_thres = -1;
 
-    vector<DistributedBin> dbins = d.distributed_bins[feature_id];
+    double dbin_start = CycleTimer::currentSeconds();
+    vector<DistributedBin>& dbins = d.distributed_bins[feature_id];
 
     // Map (rank,bin) to the bin to store active bins while scanning.
     //
@@ -71,7 +85,7 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(Dataset& d, int fea
     // to avoid the overhead of an unordered_map on repeated insertions,
     // deletes, and iterations across the map. unordered_map may or may not be
     // faster, but it's probably about the same.
-    map<pair<int,int>, DistributedBin> active_bins;
+    //map<pair<int,int>, DistributedBin> active_bins;
 
     for (int i = 0; i < dbins.size(); i++) {
 
@@ -88,69 +102,64 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(Dataset& d, int fea
             break;
         }
 
-        if (dbin.bin_start) {
-            // add to active bins
-            active_bins.insert({{dbin.rank,dbin.bin},dbin});
+        BinDist* bin_dist = distributed_bin_dist[dbin.rank];
 
-        } else {
+        vector<int> accumulate_dist(d.num_classes,0);
 
-            BinDist* bin_dist = distributed_bin_dist[dbin.rank];
-
-            vector<int> accumulate_dist(d.num_classes,0);
-
-            // on bin ends, first find the first non-repeating bin end, then perform the
-            // entropy calculation of a potential threshold split point.
-            while (i < dbins.size() - 1
-                    && !(dbins[i+1].bin_start)
-                    && float_equal(dbin.v, dbins[i+1].v)) {
-                add_vector(accumulate_dist, accumulate_dist, bin_dist->head(feature_id, dbin.bin));
-                total_samples_left += bin_counts[dbin.rank][dbin.bin];
-
-                active_bins.erase({dbin.rank,dbin.bin});
-                i++;
-                dbin = dbins[i];
-				bin_dist = distributed_bin_dist[dbin.rank];
-            }
-
-            add_vector(left_dist, left_dist, accumulate_dist);
-            add_vector(left_dist, left_dist, bin_dist->head(feature_id,dbin.bin));
-
-            // TODO: interpolation of active bins
-
-            active_bins.erase({dbin.rank,dbin.bin});
+        // on bin ends, first find the first non-repeating bin end, then perform the
+        // entropy calculation of a potential threshold split point.
+        while (i < dbins.size() - 1
+                && float_equal(dbin.v, dbins[i+1].v)) {
+            add_vector(accumulate_dist, accumulate_dist, bin_dist->head(feature_id, dbin.bin));
             total_samples_left += bin_counts[dbin.rank][dbin.bin];
-            int total_samples_right = N - total_samples_left;
 
-            float left_entropy = 0, right_entropy = 0;
-            for (int c = 0; c < d.num_classes; c++) {
-                int left_samples_per_class = left_dist[c];
-                if (left_samples_per_class != 0) {
-                    float left_frac_yes = 1. * left_samples_per_class / total_samples_left;
-                    left_entropy -= left_frac_yes * log2(left_frac_yes);
-                }
-                int right_samples_per_class = class_dist[c] - left_samples_per_class;
-                if (right_samples_per_class != 0) {
-                    float right_frac_yes = 1. * right_samples_per_class / total_samples_right;
-                    right_entropy -= right_frac_yes * log2(right_frac_yes);
-                }
-            }
-            float curr_entropy = 0;
-            if (total_samples_left != 0) {
-                curr_entropy += (1. * total_samples_left / N) * left_entropy;
-           }
-            if (total_samples_right != 0) {
-                curr_entropy += (1. * total_samples_right / N) * right_entropy;
-            }
-            if (curr_entropy < min_entropy) {
-                min_entropy = curr_entropy;
-                best_split_thres = dbin.v;
-                best_left_entropy = left_entropy;
-                best_right_entropy = right_entropy;
-            }
-
-            }
-
+            //active_bins.erase({dbin.rank,dbin.bin});
+            i++;
+            dbin = dbins[i];
+            bin_dist = distributed_bin_dist[dbin.rank];
         }
+
+        add_vector(left_dist, left_dist, accumulate_dist);
+        add_vector(left_dist, left_dist, bin_dist->head(feature_id,dbin.bin));
+
+        // TODO: interpolation of active bins
+
+        //active_bins.erase({dbin.rank,dbin.bin});
+        total_samples_left += bin_counts[dbin.rank][dbin.bin];
+        int total_samples_right = N - total_samples_left;
+
+        float left_entropy = 0, right_entropy = 0;
+        for (int c = 0; c < d.num_classes; c++) {
+            int left_samples_per_class = left_dist[c];
+            if (left_samples_per_class != 0) {
+                float left_frac_yes = 1. * left_samples_per_class / total_samples_left;
+                left_entropy -= left_frac_yes * log2(left_frac_yes);
+            }
+            int right_samples_per_class = class_dist[c] - left_samples_per_class;
+            if (right_samples_per_class != 0) {
+                float right_frac_yes = 1. * right_samples_per_class / total_samples_right;
+                right_entropy -= right_frac_yes * log2(right_frac_yes);
+            }
+        }
+        float curr_entropy = 0;
+        if (total_samples_left != 0) {
+            curr_entropy += (1. * total_samples_left / N) * left_entropy;
+        }
+        if (total_samples_right != 0) {
+            curr_entropy += (1. * total_samples_right / N) * right_entropy;
+        }
+        if (curr_entropy < min_entropy) {
+            min_entropy = curr_entropy;
+            best_split_thres = dbin.v;
+            best_left_entropy = left_entropy;
+            best_right_entropy = right_entropy;
+        }
+
+    }
+
+
+    double dbin_end = CycleTimer::currentSeconds();
+    scan_dbin_time += (dbin_end - dbin_start);
 
     _t2 += CycleTimer::currentSeconds();
     // cerr << "find_split inner main loops entropy \t taking " << CycleTimer::currentSeconds() - _tt << "s" << endl;
@@ -158,7 +167,10 @@ SplitInfo DecisionTree::find_new_entropy_by_split_on_feature(Dataset& d, int fea
 }
 
 static SplitInfo bcast_split_info(SplitInfo info) {
+    double bcast_start = CycleTimer::currentSeconds();
 	MPI_Bcast(&info, 1, split_info_type(), 0, MPI_COMM_WORLD);
+    double bcast_end = CycleTimer::currentSeconds();
+    bcast_time += (bcast_end - bcast_start);
 	return info;
 }
 
@@ -174,6 +186,7 @@ SplitInfo DecisionTree::find_split(Dataset& d, vector<int>& indices, TreeNode* c
     }
 
 	// Stop if all nodes say stop.
+    double stop_start = CycleTimer::currentSeconds();
 	pair<bool, NodeStatus> stop_result = should_stop(curr_node);
 	bool to_stop;
 	MPI_Allreduce(&stop_result.first, &to_stop, 1, MPI_BYTE, MPI_LAND, MPI_COMM_WORLD);
@@ -181,8 +194,11 @@ SplitInfo DecisionTree::find_split(Dataset& d, vector<int>& indices, TreeNode* c
 		mpi_print("detected should stop");
 		return {stop_result.second, -1, -1, -1, -1};
 	}
+    double stop_end = CycleTimer::currentSeconds();
+    stop_time += (stop_end - stop_start);
 
 	mpi_print("searching for feature to split");
+
     if (mpi_rank() == 0) {
         int best_feature = -1;
         float min_entropy = numeric_limits<float>::max();
@@ -202,6 +218,7 @@ SplitInfo DecisionTree::find_split(Dataset& d, vector<int>& indices, TreeNode* c
 		}
 
         mpi_print("receiving bin dists taking: ", CycleTimer::currentSeconds() - _tt);
+        hist_time += CycleTimer::currentSeconds() - _tt;
 
         for (int f = 0; f < d.num_features; f++) {
             auto curr_split_info = find_new_entropy_by_split_on_feature(d, f, curr_node);
@@ -213,6 +230,8 @@ SplitInfo DecisionTree::find_split(Dataset& d, vector<int>& indices, TreeNode* c
                 best_feature = f;
             }
         }
+
+        outer_loop_time += (CycleTimer::currentSeconds() - _tt);
         mpi_print("find_split outer main loop \t taking ", CycleTimer::currentSeconds() - _tt);
         /*
         cerr << "find_split outer initializing bin counts \t taking " << _t << "s" << endl;
@@ -312,12 +331,12 @@ void DecisionTree::train(Dataset &d) {
     root = new TreeNode(curr_node_id++, 0, d.num_samples, dummy_large_entropy, 0, d.num_samples);
 
     mpi_print("starting building bins");
-    float bin_start = CycleTimer::currentSeconds();
+    double bin_start = CycleTimer::currentSeconds();
 
     d.build_bins(255, root);
 
-    float bin_end = CycleTimer::currentSeconds();
-    float bin_time = bin_end - bin_start;
+    double bin_end = CycleTimer::currentSeconds();
+    double bin_time = bin_end - bin_start;
     mpi_print("building bins took: ", bin_time);
 
     vector<int>& class_dist = root->get_class_dist();
@@ -383,7 +402,10 @@ void DecisionTree::train(Dataset &d) {
                 default:
                     cout << "node became leaf for unknown reason " << curr->node_id << endl;
             }
+            double update_start = CycleTimer::currentSeconds();
             curr->update_majority_label();
+            double update_end = CycleTimer::currentSeconds();
+            update_time += (update_end - update_start);
             continue;
         }
         mpi_print("split on feature: ", curr->split_info.split_feature_id);
@@ -493,11 +515,22 @@ void DecisionTree::train(Dataset &d) {
         work_queue.push_back(curr->left_child);
         work_queue.push_back(curr->right_child);
     }
+    double update_start = CycleTimer::currentSeconds();
     for (TreeNode* left_over_node : work_queue) {
         left_over_node->update_majority_label();
     }
+    double update_end = CycleTimer::currentSeconds();
+    update_time += (update_end - update_start);
 
     mpi_print("building bins took: ", bin_time);
+    mpi_print("communicating histogram s", hist_time);
+    mpi_print("communicating updates ", update_time);
+    mpi_print("communicating stops ", stop_time);
+    mpi_print("communicating bcast ", bcast_time);
+    mpi_print("dbin scan ", scan_dbin_time);
+    mpi_print("accum counts ", accum_count_time);
+    mpi_print("outer loop total ", outer_loop_time);
+    mpi_print("total comm time ", hist_time + update_time + stop_time + bcast_time);
 }
 
 int DecisionTree::test_single_sample(const Dataset& d, int sample_id) {

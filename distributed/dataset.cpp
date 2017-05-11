@@ -75,14 +75,11 @@ Dataset DatasetParser::distributed_parse_tsv(string file_path, int num_features,
 }
 
 ostream& operator<<(ostream& os, const DistributedBin& b) {
-    os << "(" << b.bin << ", " << b.bin_start << ", "
+    os << "(" << b.bin << ", "
         << b.rank << ", " << b.v << ")";
 }
 
 bool cmp_bin(const DistributedBin& a, const DistributedBin& b) {
-    if (float_equal(a.v, b.v)) {
-        return a.bin_start;
-    }
     return a.v < b.v;
 }
 

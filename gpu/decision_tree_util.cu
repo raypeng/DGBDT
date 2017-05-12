@@ -123,6 +123,12 @@ void update_smaller_bin_dist(vector<vector<int>>& bins,
        max_bins, num_classes, num_samples);
   }
 
+  if (num_features_gpu < num_features) {
+    update_smaller_bin_dist_cpu(bins, smaller_bin_dist, indices, labels,
+				start_index, end_index,
+				num_features_gpu, num_features);
+  }
+
   if (num_features_gpu > 0) {
     cudaThreadSynchronize();
 
@@ -141,12 +147,6 @@ void update_smaller_bin_dist(vector<vector<int>>& bins,
 
     cout << "exiting kernel: " << num_features_gpu << " features\t" << CycleTimer::currentSeconds() - gpu_t << endl;
 
-  }
-
-  if (num_features_gpu < num_features) {
-    update_smaller_bin_dist_cpu(bins, smaller_bin_dist, indices, labels,
-				start_index, end_index,
-				num_features_gpu, num_features);
   }
 
   cout << "update time: " << CycleTimer::currentSeconds() - _t << endl;

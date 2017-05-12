@@ -13,6 +13,7 @@ int main() {
 
     DatasetParser dp;
 
+    // Dataset d = dp.parse_tsv("/tmp/HIGGS.tab.txt", 28, 2);
     Dataset d = dp.parse_tsv("/tmp/mslr30k.s123.tab.txt", 136, 5);
 
     // Dataset d = dp.parse_tsv("../dataset/iris.data.tab.txt", 4, 3);
@@ -40,6 +41,6 @@ int main() {
     cout << "test on sample 0, predicted label: " << dt.test_single_sample(d, 0) << endl;
     cout << "test on training set, accuracy: " << dt.test(d) << endl;
 
-    Dataset t = dp.parse_tsv("/tmp/mslr30k.s5.tab.txt", 136, 5);
-    cout << "test on test set, accuracy: " << dt.test(t) << endl;
+    // Dataset t = dp.parse_tsv("/tmp/mslr30k.s5.tab.txt", 136, 5);
+    // cout << "test on test set, accuracy: " << dt.test(t) << endl;
 }

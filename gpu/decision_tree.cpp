@@ -18,7 +18,7 @@
 
 #define INFO_GAIN_THRESHOLD 1e-3
 #define HYBRID_CUTOFF 10000
-
+#define NUM_FEATURES_CPU 2
 
 using namespace std;
 
@@ -422,13 +422,13 @@ void DecisionTree::train(Dataset &d) {
 	*/
 
 	int num_samples_here = end_index - start_index;
-	int num_features_gpu = d.num_features;
+	int num_features_gpu = d.num_features - NUM_FEATURES_CPU;
 	// too few samples -> CPU
 	// otherwise -> 50/50 hybrid
 	if (num_samples_here < HYBRID_CUTOFF) {
-	  // num_features_gpu = 0;
+	  num_features_gpu = 0;
 	} else {
-	  // num_features_gpu = d.num_features / 2;
+	  num_features_gpu = d.num_features - NUM_FEATURES_CPU;
 	}
 
 	update_smaller_bin_dist(d.bins, smaller_bin_dist, indices, labels, d.y, d.num_bins,

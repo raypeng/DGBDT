@@ -31,14 +31,16 @@ sequential version, with similar accuracy.
 
 ## Background
 
+### Decision Tree Basics
+
 Decision trees are a common model used in machine learning and data mining to approximate regression or classification functions.
 They model functions of the form:
 
 ![equation](assets/equation.png)
 
-Where x~1 through x~n are the features of the input and y is the output.
+Where x~1~ through x~p~ are the features of the input and y is the output.
 
-A decision tree models this function with a series of queries of the form "x~i < v?", where v is a value of the feature.
+A decision tree models this function with a series of queries of the form "x~i~ < v?", where v is a value of the feature.
 For example, below is an example of a decision tree used to predict whether or not a
 passenger survived the Titanic, based on the features gender, age, and
 number of siblings/spouses.
@@ -50,29 +52,35 @@ number of siblings/spouses.
 <br>
 
 For the purposes of this project, we will focus on classification decision
-trees, where we are trying to predict the class label of an input, such as in
-the example above.
+trees, where we are trying to predict the class label of an input, such as in the example above.
 
-## Background
+### Building the Decision Tree
 
-While building the tree, decision tree training algorithms would need to
-evaluate potential split points in the form of "feature f > x?" for each node.
-The data will then be partitioned on that split point and this process is
-repeated until the
-tree becomes large enough. The evaluation for a split point is usually based on some kind of metric that captures the distribution of the class labels of the data after the split.
-For example, a common criteria to use is entropy, which is defined below
-for when there are J class labels.
+Decision tree training algorithms learn by
+training on examples in the form of (x~1~,x~2~,...,x~n,y).
+While building the tree, decision tree training algorithms would need to create
+nodes that represent a query of the form "x~i~ < v?". The root node initially
+contains all of the data, and when the decision tree chooses the query, or
+the split point, the data is partitioned into left and right
+children. This process repeats until the tree has sufficient size, and
+the class label assigned to the leaves of the tree can simply be the majority class label
+of the data assigned to the leaf.
+
+Typically the most computationally expensive portion of this process is evaluating the potential split
+points for each feature. The evaluation for a split point is usually based on some kind of metric that captures the
+distribution of the class labels of the data after the split.
+For example, a common criteria to use is the minimum
+weighted entropy of the children nodes, which is defined below. S~l~ is the size
+of left child's data partition and p^l^~j~ is the fraction of the left child's
+data partition that has class label j, and similarly for the right child.
 
 ![entropy](assets/entropy.png)
 
-The criteria for a split point for feature f and value x would then be the weighted sum of the entropy of the left and right child.
-
-
-the When the feature values are continuous, it is more efficient to compute this weighted sum
-for each split point by first sorting the values based on feature f and scanning
+When the feature values are continuous, it is more efficient to compute this weighted sum
+for each split point by first sorting the values based on each feature and scanning
 through the sorted list. This way we can maintain the left and right
-distributions of the class labels and evaluate all split points for a feature.
-Below is pseudo-code for a (binary) decision tree training algorithm that achieves this.
+distributions of the class labels and evaluate all split points for a feature in
+one scan. Below is pseudo-code for a decision tree training algorithm that achieves this.
 
 <pre>
 
@@ -89,9 +97,16 @@ while (!work_queue.empty()) {
   for f in features {
     sort(node.data, comparator = f)
 
+    left_distribution = empty()
+    right_distribution = node.get_distribution()
+
     for d in node.data {
       // check this split point based off some criteria, like entropy
-      check_best_split_point(best_split_point,f,d)
+      criteria = eval(left_distribution,right_distribution)
+
+      best_split_point = upate_best_split_point(criteria, best_split_point)
+
+      update_distributions(left_distribution, right_distribution, d);
     }
   }
 

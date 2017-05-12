@@ -115,7 +115,6 @@ while (!work_queue.empty()) {
       criteria = eval(left_distribution,right_distribution)
 
       best_split_point = upate_best_split_point(criteria, best_split_point)
-
       update_distributions(left_distribution, right_distribution, d);
     }
   }
@@ -166,20 +165,16 @@ while (!work_queue.empty()) {
       criteria = eval(left_distribution,right_distribution)
 
       best_split_point = upate_best_split_point(criteria, best_split_point)
-
       update_distributions(left_distribution, right_distribution, bin);
     }
   }
 
   left,right = split(node, best_split_point)
-
   left.compute_histograms(node.histogram, best_split_point)
-
   right.compute_histograms(node.histogram, best_split_point)
 
   work_queue.add(left)
   work_queue.add(right)
-
 }
 </pre>
 
@@ -188,7 +183,10 @@ bins instead of data points. Since number of bins (set to a constant value like
 255) <<<< number of datapoints, this should provide a big performance when
 searching for split points. The main computation is now offloaded to building the initial
 histograms and constructing new histograms from old histograms. Our efforts in
-this project were to use parallelism to accelearte these two parts.
+this project were to use parallelism to accelerate these two parts.
+Specifically, we were interested to see how fast we could make this algorithm
+by using all the different computational resources available here to us at CMU,
+which include multi-core CPUs, GPUs, and a distributed cluster.
 
 ### Challenges
 
@@ -218,25 +216,6 @@ To summarize, these are the challenges we face in this project:
   the other or if the overhead of using both is worth the trouble.
 
 ## Optimizing a Sequential Implementation
-
-The standard sequential implementation for decision tree learning looks
-something like this:
-
-
-
-
-
-To improve upon this, we implemented an algorithm that first builds a
-histogram of every feature that roughly captures the distribution statistics
-of the data. Using this algorithm, training roughly looks like this:
-
-
-
-This eliminates sorting the data and also scans over histogram
-bins instead of data points. Since number of bins (set to a constant value like
-255) <<<< number of datapoints, this provides a big performance gain. The main
-computation is now offloaded to building the initial histograms and constructing new
-histograms from old histograms.
 
 To do this efficiently, we use an adaptive
 histogram construction algorithm from this

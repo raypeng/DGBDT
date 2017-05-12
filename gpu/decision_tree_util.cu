@@ -10,7 +10,7 @@
 __global__ void
 kernel_update_bin_dist(int* d_bins, int* d_bin_dist, int* d_indices, int* d_y,
 		       int start_index, int end_index,
-		       int num_features, int num_bins, int num_classes, int num_samples) {
+		       int num_bins, int num_classes, int num_samples) {
   int thread_id = threadIdx.x;
   int block_id = blockIdx.x;
   int num_threads = blockDim.x;
@@ -32,7 +32,8 @@ void initialize_device_memory(vector<vector<int>>& bins,
 			      int*& d_bins,
 			      int*& d_bin_dist,
 			      int*& d_indices,
-			      int*& d_y) {
+			      int*& d_y,
+			      int*& h_bin_dist) {
 
   int num_features = bins.size();
   int num_samples = bins.front().size();
@@ -48,6 +49,8 @@ void initialize_device_memory(vector<vector<int>>& bins,
   cudaMalloc(&d_indices, sizeof(int) * num_samples);
   cudaMalloc(&d_y, sizeof(int) * num_samples);
   cudaMemcpy(d_y, y.data(), sizeof(int) * num_samples, cudaMemcpyHostToDevice);
+
+  h_bin_dist = new int[num_features * max_bins * num_classes];
 
   cout << "intialize cuda memory: " << CycleTimer::currentSeconds() - gpu_t << endl;
   
@@ -65,6 +68,7 @@ void update_smaller_bin_dist(vector<vector<int>>& bins,
 			     int*& d_bin_dist,
 			     int*& d_indices,
 			     int*& d_y,
+			     int*& h_bin_dist,
 			     int num_features_gpu,
 			     int max_bins,
 			     int num_classes) {
@@ -80,11 +84,12 @@ void update_smaller_bin_dist(vector<vector<int>>& bins,
     if (d_bins == NULL) {
       initialize_device_memory(bins, smaller_bin_dist, y,
 			       max_bins, num_classes,
-			       d_bins, d_bin_dist, d_indices, d_y);
+			       d_bins, d_bin_dist, d_indices, d_y, h_bin_dist);
     } else {
       assert(d_bin_dist != NULL);
       assert(d_indices != NULL);
       assert(d_y != NULL);
+      assert(h_bin_dist != NULL);
     }
   }
 
@@ -94,28 +99,20 @@ void update_smaller_bin_dist(vector<vector<int>>& bins,
     cudaMemset(d_bin_dist, 0, sizeof(int) * num_features * max_bins * num_classes);
     cudaMemcpy(d_indices, indices.data() + start_index, sizeof(int) * (end_index - start_index), cudaMemcpyHostToDevice);
 
-    cout << "entering kernel" << endl;
     int num_threads_per_block = NUM_THREADS_PER_BLOCK;
-    int num_blocks = num_features;
+    int num_blocks = num_features_gpu;
     kernel_update_bin_dist<<<num_blocks, num_threads_per_block>>>
       (d_bins, d_bin_dist, d_indices, d_y,
        start_index, end_index,
-       num_features, max_bins, num_classes, num_samples);
-  }
-
-  if (num_features_gpu < num_features) {
-    update_smaller_bin_dist_cpu(bins, smaller_bin_dist, indices, labels,
-				start_index, end_index,
-				num_features_gpu, num_features);
+       max_bins, num_classes, num_samples);
   }
 
   if (num_features_gpu > 0) {
     cudaThreadSynchronize();
 
-    int* h_bin_dist = new int[num_features * max_bins * num_classes];
     cudaMemcpy(h_bin_dist, d_bin_dist, sizeof(int) * num_features * max_bins * num_classes, cudaMemcpyDeviceToHost);
-    cout << "h_bin_dist done" << endl;
-    for (int f = 0; f < num_features; f++) {
+
+    for (int f = 0; f < num_features_gpu; f++) {
       for (int bin = 0; bin < num_bins[f]; bin++) {
 	for (int label = 0; label < num_classes; label++) {
 	  int i = f * max_bins * num_classes + bin * num_classes + label;
@@ -126,12 +123,14 @@ void update_smaller_bin_dist(vector<vector<int>>& bins,
       }
     }
 
-    cout << "smaller_bin_dist done" << endl;
-
-    delete[] h_bin_dist;
-
     cout << "exiting kernel: " << num_features_gpu << " features\t" << CycleTimer::currentSeconds() - gpu_t << endl;
 
+  }
+
+  if (num_features_gpu < num_features) {
+    update_smaller_bin_dist_cpu(bins, smaller_bin_dist, indices, labels,
+				start_index, end_index,
+				num_features_gpu, num_features);
   }
 
   cout << "update time: " << CycleTimer::currentSeconds() - _t << endl;

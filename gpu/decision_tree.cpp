@@ -305,6 +305,7 @@ void DecisionTree::train(Dataset &d) {
     int* device_bin_dist = NULL;
     int* device_indices = NULL;
     int* device_y = NULL;
+    int* host_bin_dist = NULL;
 
     // Pop leaves from work queue to split in a BFS order.
     double _t; // DEBUG
@@ -394,8 +395,6 @@ void DecisionTree::train(Dataset &d) {
             end_index = curr->right;
         }
 
-	cout << "before smaller_dist " << CycleTimer::currentSeconds() - dist_start_time << endl;
-
         vector<int> labels(end_index - start_index);
 	for (int i = start_index; i < end_index; i++) {
             int index = indices[i];
@@ -403,8 +402,6 @@ void DecisionTree::train(Dataset &d) {
 	    labels[i - start_index] = label;
 	    smaller_dist[label]++;
 	}
-
-	cout << "after smaller_dist " << CycleTimer::currentSeconds() - dist_start_time << endl;
 
 	/*
 #pragma omp parallel
@@ -436,10 +433,8 @@ void DecisionTree::train(Dataset &d) {
 
 	update_smaller_bin_dist(d.bins, smaller_bin_dist, indices, labels, d.y, d.num_bins,
 				start_index, end_index,
-				device_bins, device_bin_dist, device_indices, device_y,
+				device_bins, device_bin_dist, device_indices, device_y, host_bin_dist,
 				num_features_gpu, d.max_bins, d.num_classes);
-
-	cout << "after smaller_bin_dist " << CycleTimer::currentSeconds() - dist_start_time << endl;
 
         // Calculate right_dist by using left_dist
         subtract_vector(larger_dist, curr_dist, smaller_dist);

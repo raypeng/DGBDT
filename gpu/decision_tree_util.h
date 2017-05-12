@@ -27,6 +27,7 @@ void update_smaller_bin_dist(vector<vector<int>>& bins,
 			     int*& d_bin_dist,
 			     int*& d_indices,
 			     int*& d_y,
+			     int*& h_bin_dist,
 			     int num_features_gpu,
 			     int max_bins,
 			     int num_classes);

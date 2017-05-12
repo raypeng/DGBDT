@@ -30,11 +30,21 @@ sequential version, with similar accuracy.
 
 ## Background
 
-Decision trees are a common model used in machine learning and data mining to approximate regression or classification functions. They take an input with a set of features and predict the corresponding label or value by using the nodes of the tree to split on the features. For example, below is an example of a decision tree used to assign a prediction score to whether or not a person likes computer games, based on the features "age" and "gender".
+Decision trees are a common model used in machine learning and data mining to approximate regression or classification functions.
+They model functions of the form:
+
+![equation](assets/equation.png)
+
+Where x~1 through x~n are the features of the input and y is the output.
+
+A decision tree models this function with a series of queries of the form "x~i < v?", where v is a value of the feature.
+For example, below is an example of a decision tree used to predict whether or not a
+passenger survived the Titanic, based on the features gender, age, and
+number of siblings/spouses.
 
 <br>
 
-![Image from XGBOOST](https://raw.githubusercontent.com/dmlc/web-data/master/xgboost/model/cart.png)
+![tree image](assets/tree.png)
 
 <br>
 
@@ -53,6 +63,8 @@ for when there are J class labels.
 ![entropy](assets/entropy.png)
 
 The criteria for a split point for feature f and value x would then be the weighted sum of the entropy of the left and right child.
+
+
 the When the feature values are continuous, it is more efficient to compute this weighted sum
 for each split point by first sorting the values based on feature f and scanning
 through the sorted list. This way we can maintain the left and right
@@ -315,3 +327,7 @@ We have two main goals to focus on:
    NIPS that will help us in this regard.
    We hope that implementing their idea will allow us to scale beyond two
    machines.
+
+Picture sources:
+
+https://upload.wikimedia.org/wikipedia/commons/f/f3/CART_tree_titanic_survivors.png

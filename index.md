@@ -38,9 +38,9 @@ They model functions of the form:
 
 ![equation](assets/equation.png)
 
-Where x~1~ through x~p~ are the features of the input and y is the output.
+Where x<sub>1</sub> through x<sub>p</sub> are the features of the input and y is the output.
 
-A decision tree models this function with a series of queries of the form "x~i~ < v?", where v is a value of the feature.
+A decision tree models this function with a series of queries of the form "x<sub>i</sub> < v?", where v is a value of the feature.
 For example, below is an example of a decision tree used to predict whether or not a
 passenger survived the Titanic, based on the features gender, age, and
 number of siblings/spouses.
@@ -57,9 +57,10 @@ trees, where we are trying to predict the class label of an input, such as in th
 ### Building the Decision Tree
 
 Decision tree training algorithms learn by
-training on examples in the form of (x<sub>1</sub>~,x~2~,...,x~n,y).
+training on examples in the form of
+(x<sub>1</sub>,x<sub>2</sub>,...,x<sub>n</sub>,y).
 While building the tree, decision tree training algorithms would need to create
-nodes that represent a query of the form "x~i~ < v?". The root node initially
+nodes that represent a query of the form "x<sub>i</sub> < v?". The root node initially
 contains all of the data, and when the decision tree chooses the query, or
 the split point, the data is partitioned into left and right
 children. This process repeats until the tree has sufficient size, and
@@ -70,8 +71,8 @@ Typically the most computationally expensive portion of this process is evaluati
 points for each feature. The evaluation for a split point is usually based on some kind of metric that captures the
 distribution of the class labels of the data after the split.
 For example, a common criteria to use is the minimum
-weighted entropy of the children nodes, which is defined below. S~l~ is the size
-of left child's data partition and p^l^~j~ is the fraction of the left child's
+weighted entropy of the children nodes, which is defined below. S<sub>l</sub> is the size
+of left child's data partition and p<sup>l</sup><sub>j</sub> is the fraction of the left child's
 data partition that has class label j, and similarly for the right child.
 
 ![entropy](assets/entropy.png)

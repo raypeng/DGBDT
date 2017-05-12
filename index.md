@@ -36,7 +36,11 @@ sequential version, with similar accuracy.
 Decision trees are a common model used in machine learning and data mining to approximate regression or classification functions.
 They model functions of the form:
 
+<br>
+
 ![equation](assets/equation.png)
+
+<br>
 
 Where x<sub>1</sub> through x<sub>p</sub> are the features of the input and y is the output.
 
@@ -73,9 +77,13 @@ distribution of the class labels of the data after the split.
 For example, a common criteria to use is the minimum
 weighted entropy of the children nodes, which is defined below. S<sub>l</sub> is the size
 of left child's data partition and p<sup>l</sup><sub>j</sub> is the fraction of the left child's
-data partition that has class label j, and similarly for the right child.
+data partition that has class label j. Variables for the right hcild are defined
+similarly.
+<br>
 
 ![entropy](assets/entropy.png)
+
+<br>
 
 When the feature values are continuous, it is more efficient to compute this weighted sum
 for each split point by first sorting the values based on each feature and scanning

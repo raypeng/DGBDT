@@ -57,7 +57,7 @@ trees, where we are trying to predict the class label of an input, such as in th
 ### Building the Decision Tree
 
 Decision tree training algorithms learn by
-training on examples in the form of (x~1~,x~2~,...,x~n,y).
+training on examples in the form of (x<sub>1</sub>~,x~2~,...,x~n,y).
 While building the tree, decision tree training algorithms would need to create
 nodes that represent a query of the form "x~i~ < v?". The root node initially
 contains all of the data, and when the decision tree chooses the query, or

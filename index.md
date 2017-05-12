@@ -28,7 +28,80 @@ sequential version, with similar accuracy.
 ![Summary](assets/runtime-summary.png)
 
 
-## Challenges
+## Background
+
+Decision trees are a common model used in machine learning and data mining to approximate regression or classification functions. They take an input with a set of features and predict the corresponding label or value by using the nodes of the tree to split on the features. For example, below is an example of a decision tree used to assign a prediction score to whether or not a person likes computer games, based on the features "age" and "gender".
+
+<br>
+
+![Image from XGBOOST](https://raw.githubusercontent.com/dmlc/web-data/master/xgboost/model/cart.png)
+
+<br>
+
+For the purposes of this project, we will focus on classification decision
+trees, where we are trying to predict the class label of an input, such as in
+the example above.
+
+While building the tree, decision tree training algorithms would need to
+evaluate potential split points in the form of "feature f > x?" for each node.
+The data will then be partitioned on that split point and repeat this process until the
+tree becomes large enough. The evaluation for a split point is usually based on some kind of metric that captures the distribution of the class labels of the data after the split.
+For example, a common method is to minimize the weighted entropy of the data
+after splitting the node, where entropy is defined as the expected amount of information
+with respect to the class labels, defined below for when there are J class labels.
+
+![entropy](assets/entropy.png)
+
+When the feature values are continuous, it is more efficient to compute the term
+above for each split point by first sorting the feature values and scanning
+through the sorted list. This way we can maintain the left and right
+distributions of the class labels and evaluate all split points for a feature.
+Below is pseudo-code for a (binary) decision tree training algorithm that achieves this.
+
+<pre>
+
+// root contains all the data
+work_queue.add(root)
+
+while (!work_queue.empty()) {
+  node = work_queue.remove_head()
+
+  if (node.is_terminal()) continue
+
+  best_split_point = nil
+
+  for f in features {
+    sort(node.data, comparator = f)
+
+    for d in node.data {
+      // check this split point based off some criteria, like entropy
+      check_best_split_point(best_split_point,f,d)
+    }
+  }
+
+  // partition data based on split point
+  left,right = split(node, best_split_point)
+
+  work_queue.add(left)
+  work_queue.add(right)
+}
+</pre>
+
+Since decision trees are created by splitting on feature values, which
+can often be continuous numbers, sorting the
+data is required to efficiently compute distribution statistics of
+the split while scanning through data in the inner loop. Unfortunately,
+the standard decision tree construction algorithm is slow even for sequential
+standards, since repeated sorting of data becomes a bottleneck. One common
+optimization for this is to first preprocess the dataset by constructing
+histograms to compactly describe the distribution of the data for each feature.
+
+For example, consider the image below showing the datapoints ordered by some
+feature. Instead of
+
+![Histogram binning](assets/hist_bin.png)
+
+### Challenges
 
 * Building an optimized sequential implementation of decision tree learning to use as
   a baseline requires some work, since the default decision tree training algorithm
@@ -58,34 +131,9 @@ sequential version, with similar accuracy.
 The standard sequential implementation for decision tree learning looks
 something like this:
 
-<pre>
-while (!work_queue.empty()) {
-  node = work_queue.remove_head()
 
-  if (node.is_terminal()) continue
 
-  best_split_point = nil
 
-  for f in features {
-    sort(node.data, comparator = f)
-
-    for d in node.data {
-      check_best_split_point(best_split_point,f,d)
-    }
-  }
-
-  left,right = split(node, best_split_point)
-
-  work_queue.add(left)
-  work_queue.add(right)
-
-}
-</pre>
-
-Since decision trees are created by splitting on feature values, sorting the
-data is required to efficiently compute distribution statistics of
-the data while scanning through data in the inner loop. The repeated sorting of
-data makes this algorithm slow.
 
 To improve upon this, we implemented an algorithm that first builds a
 histogram of every feature that roughly captures the distribution statistics

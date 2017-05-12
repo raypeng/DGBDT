@@ -29,7 +29,82 @@ sequential version, with similar accuracy.
 ![Summary](assets/runtime-summary.png)
 
 
-## Challenges
+## Background
+
+Decision trees are a common model used in machine learning and data mining to approximate regression or classification functions. They take an input with a set of features and predict the corresponding label or value by using the nodes of the tree to split on the features. For example, below is an example of a decision tree used to assign a prediction score to whether or not a person likes computer games, based on the features "age" and "gender".
+
+<br>
+
+![Image from XGBOOST](https://raw.githubusercontent.com/dmlc/web-data/master/xgboost/model/cart.png)
+
+<br>
+
+For the purposes of this project, we will focus on classification decision
+trees, where we are trying to predict the class label of an input, such as in
+the example above.
+
+## Background
+
+While building the tree, decision tree training algorithms would need to
+evaluate potential split points in the form of "feature f > x?" for each node.
+The data will then be partitioned on that split point and repeat this process until the
+tree becomes large enough. The evaluation for a split point is usually based on some kind of metric that captures the distribution of the class labels of the data after the split.
+For example, a common method is to minimize the weighted entropy of the data
+after splitting the node, where entropy is defined as the expected amount of information
+with respect to the class labels, defined below for when there are J class labels.
+
+![entropy](assets/entropy.png)
+
+When the feature values are continuous, it is more efficient to compute the term
+above for each split point by first sorting the feature values and scanning
+through the sorted list. This way we can maintain the left and right
+distributions of the class labels and evaluate all split points for a feature.
+Below is pseudo-code for a (binary) decision tree training algorithm that achieves this.
+
+<pre>
+
+// root contains all the data
+work_queue.add(root)
+
+while (!work_queue.empty()) {
+  node = work_queue.remove_head()
+
+  if (node.is_terminal()) continue
+
+  best_split_point = nil
+
+  for f in features {
+    sort(node.data, comparator = f)
+
+    for d in node.data {
+      // check this split point based off some criteria, like entropy
+      check_best_split_point(best_split_point,f,d)
+    }
+  }
+
+  // partition data based on split point
+  left,right = split(node, best_split_point)
+
+  work_queue.add(left)
+  work_queue.add(right)
+}
+</pre>
+
+Since decision trees are created by splitting on feature values, which
+can often be continuous numbers, sorting the
+data is required to efficiently compute distribution statistics of
+the split while scanning through data in the inner loop. Unfortunately,
+the standard decision tree construction algorithm is slow even for sequential
+standards, since repeated sorting of data becomes a bottleneck. One common
+optimization for this is to first preprocess the dataset by constructing
+histograms to compactly describe the distribution of the data for each feature.
+
+For example, consider the image below showing the datapoints ordered by some
+feature. Instead of
+
+![Histogram binning](assets/hist_bin.png)
+
+### Challenges
 
 * Building an optimized sequential implementation of decision tree learning to use as
   a baseline requires some work, since the default decision tree training algorithm
@@ -54,47 +129,14 @@ sequential version, with similar accuracy.
   since it is crucial to identify scenarios in which one is preferred over
   the other or if the overhead of using both is worth the trouble.
 
-## Approaches and Results
-
-As we seek to optimize the performance of the algorithm using all the techniques
-we learned in class and leveraging different computing hardware, we describe our
-approaches and results for individual optimizations.
-
 ## Optimizing a Sequential Implementation
-
-### Approach
 
 The standard sequential implementation for decision tree learning looks
 something like this:
 
-<pre>
-while (!work_queue.empty()) {
-  node = work_queue.remove_head()
 
-  if (node.is_terminal()) continue
 
-  best_split_point = nil
 
-  for f in features {
-    sort(node.data, comparator = f)
-
-    for d in node.data {
-      check_best_split_point(best_split_point,f,d)
-    }
-  }
-
-  left,right = split(node, best_split_point)
-
-  work_queue.add(left)
-  work_queue.add(right)
-
-}
-</pre>
-
-Since decision trees are created by splitting on feature values, sorting the
-data is required to efficiently compute distribution statistics of
-the data while scanning through data in the inner loop. The repeated sorting of
-data makes this algorithm slow.
 
 To improve upon this, we implemented an algorithm that first builds a
 histogram of every feature that roughly captures the distribution statistics
@@ -161,9 +203,15 @@ performance, we decided to not spend too
 much time on sophisticated splitting heuristics and pruning techniques that are found in mature
 frameworks as long as our accuracy is competitive.
 
-## Parallelizing with Multiple CPU Cores
+## Approaches and Results
 
-### Approach
+As we seek to optimize the performance of the algorithm using all the techniques
+we learned in class and leveraging different computing hardware, we describe our
+approaches and results for individual optimizations.
+
+### Parallelizing with Multiple CPU Cores
+
+#### Approach
 
 As mentioned previously parallelizing across tree nodes leads to the problem of
 an imbalanced workload. So we want to instaed parallelize finding a feature
@@ -179,7 +227,7 @@ the distributions of every histogram bin of every feature, this leads to a
 roughly balanced workload. The speedup graphs are shown below (experiments on
 GHC).
 
-### Result
+#### Result
 
 ![OpenMP](assets/runtime-openmp.png)
 
@@ -191,7 +239,7 @@ histogram construction is trivially parallelizable across features and needs
 minimal syncrhonization. We aim to solve this
 problem through using the GPU and hybrid parallelism mentioned later.
 
-## Distributing Training with Multiple Machines
+### Distributing Training with Multiple Machines
 
 A major concern we had initially, communication efficiency of distributed
 training, is somewhat alleviated by our histogram representation of the dataset.
@@ -231,9 +279,9 @@ significant communication overhead in this new version.
 
 ![OpenMPI-v2](assets/runtime-openmpi2.png)
 
-## GPU and Hybrid Implementation
+### GPU and Hybrid Implementation
 
-### Approach
+#### Approach
 
 Another advantage of our histogram implementation is that the main bottleneck during
 tree construction is computing child histograms, which requires a lot of moving
@@ -273,7 +321,7 @@ GPU/CPU hybrid for nodes with more samples and CPU-only for nodes with fewer sam
 This dynamic scheduling tries to minimize data transfer between GPU and CPU in cases
 where the doing work on GPU is not worth the data transfer overhead.
 
-### Result
+#### Result
 
 With this scheme, the dynamic hybrid version out performs GPU-only and CPU-only version
 by a noticable margin. We find the initial cuda memory setup time takes up 25% of total

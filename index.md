@@ -44,16 +44,17 @@ the example above.
 
 While building the tree, decision tree training algorithms would need to
 evaluate potential split points in the form of "feature f > x?" for each node.
-The data will then be partitioned on that split point and repeat this process until the
+The data will then be partitioned on that split point and this process is
+repeated until the
 tree becomes large enough. The evaluation for a split point is usually based on some kind of metric that captures the distribution of the class labels of the data after the split.
-For example, a common method is to minimize the weighted entropy of the data
-after splitting the node, where entropy is defined as the expected amount of information
-with respect to the class labels, defined below for when there are J class labels.
+For example, a common criteria to use is entropy, which is defined below
+for when there are J class labels.
 
 ![entropy](assets/entropy.png)
 
-When the feature values are continuous, it is more efficient to compute the term
-above for each split point by first sorting the feature values and scanning
+The criteria for a split point for feature f and value x would then be the weighted sum of the entropy of the left and right child.
+the When the feature values are continuous, it is more efficient to compute this weighted sum
+for each split point by first sorting the values based on feature f and scanning
 through the sorted list. This way we can maintain the left and right
 distributions of the class labels and evaluate all split points for a feature.
 Below is pseudo-code for a (binary) decision tree training algorithm that achieves this.

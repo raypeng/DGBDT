@@ -77,8 +77,9 @@ distribution of the class labels of the data after the split.
 For example, a common criteria to use is the minimum
 weighted entropy of the children nodes, which is defined below. S<sub>l</sub> is the size
 of left child's data partition and p<sup>l</sup><sub>j</sub> is the fraction of the left child's
-data partition that has class label j. Variables for the right hcild are defined
+data partition that has class label j. Variables for the right child are defined
 similarly.
+
 <br>
 
 ![entropy](assets/entropy.png)
@@ -89,7 +90,7 @@ When the feature values are continuous, it is more efficient to compute this wei
 for each split point by first sorting the values based on each feature and scanning
 through the sorted list. This way we can maintain the left and right
 distributions of the class labels and evaluate all split points for a feature in
-one scan. Below is pseudo-code for a decision tree training algorithm that achieves this.
+one scan. Below is pseudo-code for how a decision tree training algorithm that achieves this.
 
 <pre>
 
@@ -140,7 +141,7 @@ a histogram for each feature to compactly describe the distribution of the data.
 
 <br>
 
-With these histograms, sorting is no longer necessary. Below is psuedo-code
+With these histograms, sorting is no longer necessary. Below is pseudo-code
 of how to leverage the histogram binning technique.
 
 <pre>

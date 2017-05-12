@@ -127,21 +127,71 @@ while (!work_queue.empty()) {
 }
 </pre>
 
-Since decision trees are created by splitting on feature values, which
-can often be continuous numbers, sorting the
-data is required to efficiently compute distribution statistics of
-the split while scanning through data in the inner loop. Unfortunately,
-the standard decision tree construction algorithm is slow even for sequential
-standards, since repeated sorting of data becomes a bottleneck. One common
-optimization for this is to first preprocess the dataset by constructing
-histograms to compactly describe the distribution of the data for each feature.
+### A Faster Sequential Algorithm
 
-For example, consider the image below showing the datapoints ordered by some
-feature. Instead of
+Unfortunately, the standard decision tree construction algorithm is slow even for
+sequential standards, since repeated sorting of data becomes a bottleneck. One common
+optimization for this is to first preprocess the dataset by constructing
+a histogram for each feature to compactly describe the distribution of the data.
+
+<br>
 
 ![Histogram binning](assets/hist_bin.png)
 
+<br>
+
+With these histograms, sorting is no longer necessary. Below is psuedo-code
+of how to leverage the histogram binning technique.
+
+<pre>
+
+root.histograms = construct_histograms()
+work_queue.add(root);
+
+while (!work_queue.empty()) {
+  node = work_queue.remove_head()
+
+  if (node.is_terminal()) continue
+
+  best_split_point = nil
+
+  for f in features {
+    left_distribution = empty()
+    right_distribution = node.get_distribution()
+
+    for bin in node.histograms(f) {
+
+      // check this split point based off some criteria, like entropy
+      criteria = eval(left_distribution,right_distribution)
+
+      best_split_point = upate_best_split_point(criteria, best_split_point)
+
+      update_distributions(left_distribution, right_distribution, bin);
+    }
+  }
+
+  left,right = split(node, best_split_point)
+
+  left.compute_histograms(node.histogram, best_split_point)
+
+  right.compute_histograms(node.histogram, best_split_point)
+
+  work_queue.add(left)
+  work_queue.add(right)
+
+}
+</pre>
+
+This eliminates sorting the data and also scans over histogram
+bins instead of data points. Since number of bins (set to a constant value like
+255) <<<< number of datapoints, this should provide a big performance when
+searching for split points. The main computation is now offloaded to building the initial
+histograms and constructing new histograms from old histograms. Our efforts in
+this project were to use parallelism to accelearte these two parts.
+
 ### Challenges
+
+To summarize, these are the challenges we face in this project:
 
 * Building an optimized sequential implementation of decision tree learning to use as
   a baseline requires some work, since the default decision tree training algorithm
@@ -179,38 +229,15 @@ To improve upon this, we implemented an algorithm that first builds a
 histogram of every feature that roughly captures the distribution statistics
 of the data. Using this algorithm, training roughly looks like this:
 
-<pre>
-build_histograms()
 
-while (!work_queue.empty()) {
-  node = work_queue.remove_head()
-
-  if (node.is_terminal()) continue
-
-  best_split_point = nil
-
-  for f in features {
-    for bin in node.histogram(f) {
-      check_best_split_point(best_split_point,f,bin)
-    }
-  }
-
-  left,right = split(node, best_split_point)
-
-  left.compute_histograms(node.histogram, best_split_point)
-  right.compute_histograms(node.histogram, best_split_point)
-
-  work_queue.add(left)
-  work_queue.add(right)
-
-}
-</pre>
 
 This eliminates sorting the data and also scans over histogram
 bins instead of data points. Since number of bins (set to a constant value like
 255) <<<< number of datapoints, this provides a big performance gain. The main
 computation is now offloaded to building the initial histograms and constructing new
-histograms from old histograms. To do this efficiently, we use an adaptive
+histograms from old histograms.
+
+To do this efficiently, we use an adaptive
 histogram construction algorithm from this
 [paper](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/boosttreerank.pdf) and compute the left/right
 child histograms by first computing the smaller one, then performing histogram

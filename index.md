@@ -12,6 +12,7 @@ Rui Peng (ruip@andrew.cmu.edu)
 * [link to checkpoint](checkpoint.html)
 * [link to code](https://github.com/raypeng/DGBDT)
 
+# Final Report
 
 ## Summary
 
@@ -51,6 +52,8 @@ number of siblings/spouses.
 For the purposes of this project, we will focus on classification decision
 trees, where we are trying to predict the class label of an input, such as in
 the example above.
+
+## Background
 
 While building the tree, decision tree training algorithms would need to
 evaluate potential split points in the form of "feature f > x?" for each node.
@@ -189,6 +192,8 @@ histogram construction algorithm from this
 child histograms by first computing the smaller one, then performing histogram
 subtraction to get the larger one.
 
+### Result
+
 Below are performance comparisons between our implementation of the
 above two algorithms and the popular decision tree learning framework sci-kit learn.
 We benchmarked on the [Microsoft Learn to
@@ -211,7 +216,15 @@ performance, we decided to not spend too
 much time on sophisticated splitting heuristics and pruning techniques that are found in mature
 frameworks as long as our accuracy is competitive.
 
-## Parallelizing with Multiple CPU Cores
+## Approaches and Results
+
+As we seek to optimize the performance of the algorithm using all the techniques
+we learned in class and leveraging different computing hardware, we describe our
+approaches and results for individual optimizations.
+
+### Parallelizing with Multiple CPU Cores
+
+#### Approach
 
 As mentioned previously parallelizing across tree nodes leads to the problem of
 an imbalanced workload. So we want to instaed parallelize finding a feature
@@ -227,6 +240,7 @@ the distributions of every histogram bin of every feature, this leads to a
 roughly balanced workload. The speedup graphs are shown below (experiments on
 GHC).
 
+#### Result
 
 ![OpenMP](assets/runtime-openmp.png)
 
@@ -238,7 +252,7 @@ histogram construction is trivially parallelizable across features and needs
 minimal syncrhonization. We aim to solve this
 problem through using the GPU and hybrid parallelism mentioned later.
 
-## Distributing Training with Multiple Machines
+### Distributing Training with Multiple Machines
 
 A major concern we had initially, communication efficiency of distributed
 training, is somewhat alleviated by our histogram representation of the dataset.
@@ -267,12 +281,20 @@ As you can see from the graph, histogram construction scales well due to the
 trivial communication requirements necessary for it. On the other hand,
 communication during tree building is expensive, since the root
 machine must communicate with all other machines on every node split for every
-feature. We plan to further optimize our distributed training
-code by reducing the amount of information each machine needs to send to
-the root by performing some local computation first to get this to scale beyond
-2 nodes.
+feature. To further reduce the amount of information each machine needs to send to
+the root, we implemented a voting scheme inspired by this
+[NIPS paper](https://arxiv.org/abs/1611.01276) where each local node sends top k histogram
+feature id's to the master and the master performs vote aggregation to determine
+the best feature to split on. This way, we reduce the amount of communication to
+almost constant since only indices are exchanged when determining the best split.
+We can see from the graph below that the performance no longer suffers from
+significant communication overhead in this new version.
 
-## GPU and Hybrid Implementation
+![OpenMPI-v2](assets/runtime-openmpi2.png)
+
+### GPU and Hybrid Implementation
+
+#### Approach
 
 Another advantage of our histogram implementation is that the main bottleneck during
 tree construction is computing child histograms, which requires a lot of moving
@@ -300,33 +322,31 @@ merge_results(gpu_result, cpu_result)
 
 Since the speedup graph for CPU suggests that our algorithm may be bandwidth
 bound, an implementation that uses both the memory bandwidth of GPU and CPU will
-likely be faster. Initial results show that hybrid reduces tree building time by 20%
-over GPU only when running on the [HIGGS Data Set](https://archive.ics.uci.edu/ml/datasets/HIGGS),
-which has 11 million samples. Both the GPU only and hybrid only implementation
+likely be faster. We foundhybrid reduces tree building time by 10%
+over GPU only by statically assigning 8 features to threads on CPU and the rest
+on GPU on the [HIGGS Data Set](https://archive.ics.uci.edu/ml/datasets/HIGGS),
+which has 11 million samples. Both the GPU only and hybrid only implemetation
 are improvements over a multi-core CPU implementation with 16 threads.
-likely be faster. We are currently playing around with scheduling strategies (such
-as scheduling based on the size of the node we are woking with).
-Initial results show that hybrid reduces tree building time by 20%
-over GPU only when running on the [HIGGS Data Set](https://archive.ics.uci.edu/ml/datasets/HIGGS),
-which has 11 million samples. Both the GPU only and hybrid only implementations
-are improvements over a multi-core CPU implementation with 16 threads.
-We are working on optimizing this further with a better scheduling strategy.
 
-## Further Work
+We have also experimented with a dynamic work scheduling policies in which we choose
+GPU/CPU hybrid for nodes with more samples and CPU-only for nodes with fewer samples
+(much like choosing between top-down and bottom-up in hybrid BFS in assignment 3).
+This dynamic scheduling tries to minimize data transfer between GPU and CPU in cases
+where the doing work on GPU is not worth the data transfer overhead.
 
-We have two main goals to focus on:
+#### Result
 
-1. Improve our GPU implementation and hybrid scheduling. Currently the GPU
-   implementation is pretty simple, which might make hybrid scheduling
-   not as effective as it could be. We would
-   like to look into further improving the GPU implementation to show the
-   advantages of hybrid scheduling. Specifically, we are planning to reduce
-   the memory movement between host and device that occurs when training.
-2. Improve the communication efficiency of our distributed implementation. We
-   found a [paper](https://arxiv.org/abs/1611.01276) recently published at
-   NIPS that will help us in this regard.
-   We hope that implementing their idea will allow us to scale beyond two
-   machines.
+With this scheme, the dynamic hybrid version out performs GPU-only and CPU-only version
+by a noticable margin. We find the initial cuda memory setup time takes up 25% of total
+tree construction time which makes the drags GPU-only total runtime down to the same as CPU-only. This indicates
+that to find a good hybrid scheduling strategy, we need to carefully profile the code
+and placing the work optimally on GPU and CPU depending on specific workload conditions.
+If we had more time for the project, we would perform a more comprehensive profiling and
+devise an optimal dynamic scheduling policy.
+
+![scheduling](assets/runtime-scheduling.png)
+
+## References
 
 Picture sources:
 

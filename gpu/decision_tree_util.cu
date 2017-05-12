@@ -6,6 +6,8 @@
 
 #define UPDIV(n, d) (((n)+(d)-1)/(d))
 #define NUM_THREADS_PER_BLOCK 256
+#define NUM_CLASSES 5
+#define MAX_BINS 255
 
 __global__ void
 kernel_update_bin_dist(int* d_bins, int* d_bin_dist, int* d_indices, int* d_y,
@@ -15,12 +17,26 @@ kernel_update_bin_dist(int* d_bins, int* d_bin_dist, int* d_indices, int* d_y,
   int block_id = blockIdx.x;
   int num_threads = blockDim.x;
   int f = block_id;
+  __shared__ int local_counts[MAX_BINS * NUM_CLASSES];
+
+  for (int i = thread_id; i < MAX_BINS * NUM_CLASSES; i+= num_threads) {
+      local_counts[i] = 0;
+  }
+
+  __syncthreads();
+
   // printf("kernel block_id %d [%d - %d]\n", f, start_index, end_index);
   for (int i = start_index + thread_id; i < end_index; i += num_threads) {
     int index = d_indices[i - start_index];
     int label = d_y[index];
     int bin = d_bins[f * num_samples + index];
-    atomicAdd(&d_bin_dist[f * num_bins * num_classes + bin * num_classes + label], 1);
+    atomicAdd(&local_counts[bin * num_classes + label], 1);
+  }
+
+  __syncthreads();
+
+  for (int i = thread_id; i < MAX_BINS * NUM_CLASSES; i+= num_threads) {
+      d_bin_dist[f * MAX_BINS * NUM_CLASSES + i] += local_counts[i];
   }
 }
 
@@ -53,7 +69,7 @@ void initialize_device_memory(vector<vector<int>>& bins,
   h_bin_dist = new int[num_features * max_bins * num_classes];
 
   cout << "intialize cuda memory: " << CycleTimer::currentSeconds() - gpu_t << endl;
-  
+
 }
 
 void update_smaller_bin_dist(vector<vector<int>>& bins,
@@ -78,7 +94,7 @@ void update_smaller_bin_dist(vector<vector<int>>& bins,
   int num_features = bins.size();
   int num_samples = bins.front().size();
 
-  double _t = CycleTimer::currentSeconds(); 
+  double _t = CycleTimer::currentSeconds();
 
   if (num_features_gpu > 0) {
     if (d_bins == NULL) {
@@ -176,6 +192,6 @@ void update_smaller_bin_dist(vector<vector<int>>& bins,
 
   // device_vector<int> f_bins = d_bins.front();
   // device_vector<device_vector<int>> f_bin_dists = d_smaller_bin_dist.front();
-  
+
 }
 */

@@ -422,7 +422,7 @@ void DecisionTree::train(Dataset &d) {
 	*/
 
 	int num_samples_here = end_index - start_index;
-	int num_features_gpu = d.num_features / 2;
+	int num_features_gpu = d.num_features;
 	// too few samples -> CPU
 	// otherwise -> 50/50 hybrid
 	if (num_samples_here < HYBRID_CUTOFF) {

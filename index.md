@@ -453,7 +453,7 @@ we tried running our hybrid algorithm on the
 the algorithm and compared its speedup when run on the Microsoft
 Learning to Rank dataset (about 2,000,000 samples).
 
-[!higgs](assets/different-datasets.png)
+![higgs](assets/different-datasets.png)
 
 Based on our intial profiling, the HIGGS dataset benefits signficantly more from
 the increase in dataset size, supporting our hypothesis that a larger dataset

@@ -131,7 +131,7 @@ while (!work_queue.empty()) {
 
 Unfortunately, the standard decision tree construction algorithm is slow even for
 sequential standards, since repeated sorting of data becomes a bottleneck. One common
-optimization for this is to first preprocess the dataset by constructing
+optimization for this is to first pre-process the dataset by constructing
 a histogram for each feature to compactly describe the distribution of the data.
 
 <br>
@@ -178,10 +178,10 @@ while (!work_queue.empty()) {
 }
 </pre>
 
-This eliminates sorting the data and also scans over histogram
+This eliminates data sorting and also scans over histogram
 bins instead of data points. Since number of bins (set to a constant value like
-255) <<<< number of datapoints, this should provide a big performance when
-searching for split points. The main computation is now offloaded to building the initial
+255), which is much less than the number of datapoints. This should provide a big performance gain
+when searching for split points. The main computation is now offloaded to building the initial
 histograms and constructing new histograms from old histograms. Our efforts in
 this project were to use parallelism to accelerate these two parts.
 Specifically, we were interested to see how fast we could make this algorithm
@@ -211,7 +211,7 @@ To summarize, these are the challenges we face in this project:
   which makes the algorithm have less benefit from SPMD architecture”. Our
   implementation of decision tree learning must not have the same problems.
 
-* Scheduling GPU and CPU computation on a heterogenous machine is difficult,
+* Scheduling GPU and CPU computation on a heterogeneous machine is difficult,
   since it is crucial to identify scenarios in which one is preferred over
   the other or if the overhead of using both is worth the trouble.
 
@@ -219,7 +219,7 @@ To summarize, these are the challenges we face in this project:
 ## Approaches and Results
 
 As we seek to optimize the performance of the algorithm using all the techniques
-we learned in class and leveraging different computing hardware, we describe our
+we learned in class and leverage different computing hardware, we describe our
 approaches and results for individual optimizations.
 
 ### Optimizing a Sequential Implementation
@@ -227,7 +227,7 @@ approaches and results for individual optimizations.
 ### Approach
 
 We first implemented the naive, sorting based implementation for decision tree
-training. After some intial profiling, we then implemented the histogram-based
+training. After some initial profiling, we then implemented the histogram-based
 algorithm mentioned above.
 
 To construct the initial histogram bins efficiently, we implemented an
@@ -244,12 +244,12 @@ Below are performance comparisons between our implementations of the
 sorting-based algorithm and the histogram-based algorithm. We
 also compare our performance with a popular framework used for
 decision tree training: scikit-learn.
-We benchmarked on the [Microsoft Learn to
+We benchmarked on the [Microsoft Learning to
 Rank](https://www.microsoft.com/en-us/research/project/mslr/) dataset, which contains 2
-million (query,url) pairs, each with 136 features and a label denoting
+million (query, url) pairs, each with 136 features and a label denoting
 the relevance of the query to the url. Experiments were performed on GHC.
 We set the maximum number of leaves in the decision tree to be 255, which
-is consistent with all experiements listed on this page.
+is consistent with all experiments listed on this page.
 
 
 ![Sequential](assets/runtime-sequential.png)
@@ -259,7 +259,7 @@ the traditional decision tree learning algorithm, for the reasons mentioned in B
 This is the optimized sequential version we will use as a baseline later. Note that although
 our accuracy has also decreased slightly due to the approximate
 nature of our histogram binning, the reduction is small (around 0.05%)
-and not much of a concern if we used our algorithm in an ensemble method (which
+and is not much of a concern if we used our algorithm in an ensemble method (which
 people often do with decision trees). Furthermore, since our focus is on
 performance, we decided to not spend too much time on sophisticated splitting
 heuristics and pruning techniques that are found in mature frameworks as long as our accuracy
@@ -269,9 +269,8 @@ is competitive.
 
 #### Approach
 
-As mentioned previously parallelizing across tree nodes likely leads to the
-problem of an imbalanced workload with a static partitioning or too much overhead
-with a dynamic partitioning. So instead we decided to parallelize
+As mentioned previously, parallelizing across tree nodes suffers from the
+problem of an imbalanced workload. Instead, we decided to parallelize
 the decision tree training algorithm within a single tree node, specifically for
 the two expensive areas as mentioned previously:
 
@@ -287,7 +286,7 @@ lead to a roughly balanced workload.
 
 The graph below shows the training times of the parallel algorithm run on
 different numbers of threads. Experiments were performed on GHC and the
-Microsft Learn to Rank dataset.
+Microsoft Learn to Rank dataset.
 
 ![OpenMP](assets/runtime-openmp.png)
 
@@ -304,9 +303,9 @@ such as distributed cluster machines on Latedays and GPUs on GHC machines.
 #### Approach
 
 The communication efficiency of distributed
-training, was a major concern we had initially, but it is somewhat alleviated by
+training was a major concern we had initially, but is somewhat alleviated by
 our histogram representation of the dataset. This allows multiple machines to
-communicate with histogram statistics instead of their the dataset statistics,
+communicate with histogram statistics instead of their the full dataset statistics,
 drastically reducing the communication requirements.
 
 Our first distributed algorithm roughly works as follows:
@@ -323,13 +322,13 @@ Our first distributed algorithm roughly works as follows:
    merges these histograms and evaluates possible split points like before.
 
 4. Master sends the best split point to the workers. Each machine in parallel
-   now splits the node into left and right childs. Repeat steps 3 and 4 as
+   now splits the node into left and right children. Repeat steps 3 and 4 as
    needed.
 
 The parallelism that we gain from this algorithm is that each machine can
 construct and maintain histograms for their partition in parallel. Evaluating
 possible split points accurately, however, requires a global view of the
-feature distributions and as a result master needs all the histograms to make
+feature distributions and as a result, master needs all the histograms to make
 a decision. This could result in high communication overhead, since every
 node we split in the decision tree would require this information exchange.
 
@@ -345,13 +344,13 @@ now roughly as follows (steps 1 and 2 same as before):
 4. Each worker votes for their top k features, where k is a configurable
    parameter.
 
-5. Master aggregates the votes and requests the top 2k most voted features.
+5. Master aggregates the votes and requests the top 2\*k most voted features.
 
-6. Workers send their local histograms for the top 2k features to master.
+6. Workers send their local histograms for the top 2\*k features to master.
    Master merges these histograms and evaluates possible split points like before.
 
 7. Master sends the best split point to the workers. Each machine in parallel
-   now splits the node into left and right childs. Repeat steps 3 to 7 as
+   now splits the node into left and right children. Repeat steps 3 to 7 as
    needed.
 
 We implemented the above algorithms with Open MPI for communication
@@ -369,8 +368,8 @@ to Rank dataset (2 million samples, 136 features) to evaluate training time.
 ![OpenMPI-v2](assets/runtime-openmpi2.png)
 
 In the first graph, which shows training times for the first distributed
-algorithm,  we can see that distributing training to 2 nodes gives us good speedup.
-Communication time, however, starts to dominate after 2 nodes to such a degree that total
+algorithm,  we can see that distributing training with 2 nodes gives us good speedup.
+Communication time, however, starts to dominate after 2 nodes such that total
 training time actually starts to increase. The time to
 actually construct the tree goes up as well, since with more nodes there
 are more split points to consider, outweighing the advantages we get from
@@ -386,7 +385,7 @@ OpenMP code with 24 threads).
 Since there is no guarantee that the local information used to pick feature
 candidates for splitting actually included the globally best feature, the
 distributed voting scheme is an approximation. To make sure our implementation
-did not sacrifice accuracy for speed, we also measured the acuracy of our
+did not sacrifice accuracy for speed, we also measured the accuracy of our
 trained decision tree as we scaled the number of nodes.
 We also compared the accuracy of our distributed algorithm with a sequential
 scikit-learn implementation.
@@ -402,21 +401,21 @@ the original [paper](https://arxiv.org/abs/1611.01276)).
 #### Approach
 
 Another advantage of our histogram implementation is that the main bottleneck during
-tree construction is computing child histograms, which requires a lot of moving
-data around and incrementing counters in memory. This kind of computation lends
-itself well to a GPU implementation. We use CUDA kernels to perform update of histogram bin
-statistics and assign each feature to one CUDA thread block in which all CUDA threads
-within that thread block update histogram bin distributions by looping over
-all data points within the tree node in an interleaved fashion. To further reduce global
-memory writes we allocate a thread block local `__shared__` buffer to do local updates
-and push updates to global memory at the end of the kernel call.
+tree construction is computing child histograms, which requires a lot of memory
+movement and updates. This kind of computation lends
+itself well to a GPU implementation. We use CUDA kernels to perform updates of histogram bin
+statistics. Each CUDA thread block is assigned to a feature, in which all CUDA threads
+update histogram bin distributions by looping over
+data points within the tree node in an interleaved fashion. To further reduce global
+memory writes we allocate a local `__shared__` buffer to do local updates
+and push the agreggate updates to global memory at the end.
 
 As an extension of using only GPU to perform histogram updates and letting CPU stay idle,
 we further improve performance by adopting a hybrid algorithm -- specifically
-we assign different features to CPU and GPU to perform histogram updates (see pseudocode below).
-The workload nature of histogram updating is easily dividable to CPU and GPU in that updates to different
+we assign different features to CPU and GPU to perform histogram updates (see pseudo-code below).
+The workload nature of histogram updating is easily dividable to CPU and GPU since updates to different
 features will be written to different locations without any data races. The key advantage of
-hybrid scheduling work to CPU and GPU is that we can perform asynchronous CUDA kernel
+scheduling work to CPU and GPU is that we can perform asynchronous CUDA kernel
 calls and utilize both types of compute hardware to do work in parallel.
 
 <pre>
@@ -438,28 +437,34 @@ merge_results(gpu_result, cpu_result)
 
 Since the speedup graph for CPU suggests that our algorithm may be bandwidth
 bound, an implementation that uses both the memory bandwidth of GPU and CPU will
-likely be faster. When run on the Microsoft Learn to Rank dataset on GHC,
+likely be faster. When run on the Microsoft Learning to Rank dataset on GHC,
 we found that hybrid reduces tree building time by 10%
-over GPU only by using a dynamic work scheduling policy in which we choose
-GPU/CPU hybrid for nodes with more samples and CPU-only for nodes with fewer samples
+(note: this does not include initial histogram construction,
+which we did not accelerate with GPUs).
+
+For each tree node, we chose to assign 8 features to CPU and the rest to GPU as
+our GPU/CPU hybrid assignment. We then used a dynamic scheduling policy
+which used the hybrid version for nodes with more samples and
+CPU-only for nodes with fewer samples
 (much like choosing between top-down and bottom-up in hybrid BFS in assignment 3).
 This dynamic scheduling tries to minimize data transfer between GPU and CPU in cases
 where doing work on GPU is not worth the data transfer overhead.
 
 ![scheduling](assets/runtime-scheduling.png)
 
-With this scheme, the dynamic hybrid version out performs GPU-only and CPU-only version
-by a decent margin by utilizing heterogenous computing resources. It is interesting that
-CPU-only and GPU-only land on the same runtime. After profiling, we found that the initial
-CUDA memory setup time (cudaMalloc, initial cudaMemcpy's) takes up 25% of total tree construction
-time, which makes the overall runtime of gpu same as CPU-only despite the relatively fast
-CUDA kernel calls used to compute child histograms. This indicates that to find a good
-hybrid scheduling strategy, we need to carefully profile the code and place the work
+With this scheme, the dynamic hybrid version out-performs the GPU-only and the CPU-only versions
+by a decent margin by utilizing heterogeneous computing resources. It is interesting that
+CPU-only and GPU-only have the same runtime. After profiling, we found that the initial
+CUDA memory setup time (cudaMalloc, initial cudaMemcpy's) takes up 25%
+of total tree construction time,
+which makes the overall runtime of the GPU-only the same as CPU-only despite the
+relatively fast CUDA kernel calls used to compute child histograms. This indicates
+that to find a good hybrid scheduling strategy, we need to carefully profile the code and place the work
 optimally on GPU and CPU depending on specific workload conditions. If we had more time for the project,
 we would perform a more comprehensive profiling and devise an optimal dynamic scheduling policy.
 
 Although we didn't have time to devise a better dynamic scheduling policy, we
-did some initial testing of hybrid on a larger dataset. Since we suspected that they
+did some initial testing of hybrid on a larger dataset. Since we suspected that the
 overhead of CUDA memory setup time was limiting the advantages of hybrid/GPU,
 we tried running our hybrid algorithm on the
 [HIGGS](https://archive.ics.uci.edu/ml/datasets/HIGGS) dataset, which contains
@@ -469,12 +474,11 @@ Learning to Rank dataset (about 2,000,000 samples).
 
 ![higgs](assets/different-datasets.png)
 
-Based on our intial profiling, the HIGGS dataset benefits signficantly more from
+Based on our intial profiling, the hybrid algorithm benefits significantly from
 the increase in dataset size, supporting our hypothesis that a larger dataset
 would offset the CUDA memory setup overhead and allow a GPU/hybrid
-implementation to shine. Specifically, our hybrid implementation has a **24
-speedup** over our optimized squential for the HIGGs dataset, but only a **4.7x speedup**
-when training on the Microsoft Learning to Rank dataset.
+implementation to shine. Specifically, our hybrid implementation has a **24x speedup** over our optimized sequential
+version  for the HIGGs dataset, but only a **4.7x speedup** when training on the Microsoft Learning to Rank dataset.
 
 ## References
 

@@ -420,15 +420,20 @@ GPU/CPU hybrid for nodes with more samples and CPU-only for nodes with fewer sam
 This dynamic scheduling tries to minimize data transfer between GPU and CPU in cases
 where the doing work on GPU is not worth the data transfer overhead.
 
+
+![scheduling](assets/runtime-scheduling.png)
+
+
 With this scheme, the dynamic hybrid version out performs GPU-only and CPU-only version
-by a noticable margin. We find the initial cuda memory setup time takes up 25% of total
-tree construction time which makes the drags GPU-only total runtime down to the same as CPU-only. This indicates
+by a noticable margin by utilizing heterogenous computing resources. It is interesting
+CPU-only and GPU-only land on the same runtime. After profiling, we find the initial cuda
+memory setup time takes up 25% of total tree construction time, which makes the overall
+runtime same as CPU-only despite the relatively fast CUDA kernel call. This indicates
 that to find a good hybrid scheduling strategy, we need to carefully profile the code
 and placing the work optimally on GPU and CPU depending on specific workload conditions.
 If we had more time for the project, we would perform a more comprehensive profiling and
 devise an optimal dynamic scheduling policy.
 
-![scheduling](assets/runtime-scheduling.png)
 
 ## References
 

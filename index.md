@@ -44,7 +44,7 @@ They model functions of the form:
 
 Where x<sub>1</sub> through x<sub>p</sub> are the features of the input and y is the output.
 
-A decision tree models this function with a series of queries of the form "x<sub>i</sub> < v?", where v is a value of the feature.
+A decision tree models this function with a series of queries of the form "x<sub>i</sub> > v?", where v is a value of the feature.
 For example, below is an example of a decision tree used to predict whether or not a
 passenger survived the Titanic, based on the features gender, age, and
 number of siblings/spouses.
@@ -64,7 +64,7 @@ Decision tree training algorithms learn by
 training on examples in the form of
 (x<sub>1</sub>,x<sub>2</sub>,...,x<sub>n</sub>,y).
 While building the tree, decision tree training algorithms would need to create
-nodes that represent a query of the form "x<sub>i</sub> < v?". The root node initially
+nodes that represent a query of the form "x<sub>i</sub> > v?". The root node initially
 contains all of the data, and when the decision tree chooses the query, or
 the split point, the data is partitioned into left and right
 children. This process repeats until the tree has sufficient size, and
@@ -215,37 +215,6 @@ To summarize, these are the challenges we face in this project:
   since it is crucial to identify scenarios in which one is preferred over
   the other or if the overhead of using both is worth the trouble.
 
-## Optimizing a Sequential Implementation
-
-To do this efficiently, we use an adaptive
-histogram construction algorithm from this
-[paper](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/boosttreerank.pdf) and compute the left/right
-child histograms by first computing the smaller one, then performing histogram
-subtraction to get the larger one.
-
-### Result
-
-Below are performance comparisons between our implementation of the
-above two algorithms and the popular decision tree learning framework sci-kit learn.
-We benchmarked on the [Microsoft Learn to
-Rank](https://www.microsoft.com/en-us/research/project/mslr/) dataset, which contains 2
-million (query,url) pairs, each with 136 features and a label denoting
-the relevance of the query to the url. Experiments were performed on GHC.
-
-
-![Sequential](assets/runtime-sequential.png)
-
-
-Our final sequential version observes massive improvements over both sci-kit learn and
-the traditional decision tree learning algorithm. This is the optimized sequential version
-we will use as a baseline later.
-Note that although our accuracy has also decreased slightly due to the approximate
-nature of our histogram binning, the reduction is small (on the order of 0.1)
-and not much of a concern if we used our algorithm in an ensemble method (which
-people often do with decision trees). Furthermore, since our focus is on
-performance, we decided to not spend too
-much time on sophisticated splitting heuristics and pruning techniques that are found in mature
-frameworks as long as our accuracy is competitive.
 
 ## Approaches and Results
 
@@ -253,37 +222,84 @@ As we seek to optimize the performance of the algorithm using all the techniques
 we learned in class and leveraging different computing hardware, we describe our
 approaches and results for individual optimizations.
 
+### Optimizing a Sequential Implementation
+
+### Approach
+
+We first implemented the naive, sorting based implementation for decision tree
+training. After some intial profiling, we then implemented the histogram-based
+algorithm mentioned above.
+
+To construct the initial histogram bins efficiently, we implemented an
+adaptive histogram construction algorithm based on this
+[paper](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/boosttreerank.pdf).
+We also optimized the histogram splitting phase by
+only reconstructing the smaller child's histograms when we split a node.
+The larger child's histogram can then be quickly constructed from its
+parent's and its sibling's histograms through histogram subtraction.
+
+#### Result
+
+Below are performance comparisons between our implementations of the
+sorting-based algorithm and the histogram-based algorithm. We
+also compare our performance with a popular framework used for
+decision tree training: scikit-learn.
+We benchmarked on the [Microsoft Learn to
+Rank](https://www.microsoft.com/en-us/research/project/mslr/) dataset, which contains 2
+million (query,url) pairs, each with 136 features and a label denoting
+the relevance of the query to the url. Experiments were performed on GHC.
+We set the maximum number of leaves in the decision tree to be 255, which
+is consistent with all experiements listed on this page.
+
+
+![Sequential](assets/runtime-sequential.png)
+
+Our final sequential version observes massive improvements over both scikit-learn and
+the traditional decision tree learning algorithm, for the reasons mentioned in Background.
+This is the optimized sequential version we will use as a baseline later. Note that although
+our accuracy has also decreased slightly due to the approximate
+nature of our histogram binning, the reduction is small (around 0.05%)
+and not much of a concern if we used our algorithm in an ensemble method (which
+people often do with decision trees). Furthermore, since our focus is on
+performance, we decided to not spend too much time on sophisticated splitting
+heuristics and pruning techniques that are found in mature frameworks as long as our accuracy
+is competitive.
+
 ### Parallelizing with Multiple CPU Cores
 
 #### Approach
 
-As mentioned previously parallelizing across tree nodes leads to the problem of
-an imbalanced workload. So we want to instaed parallelize finding a feature
-to split on within a single node. After profiling our code, we determined two
-computationally expensive areas that might be opportunities for parallelism:
+As mentioned previously parallelizing across tree nodes likely leads to the
+problem of an imbalanced workload with a static partitioning or too much overhead
+with a dynamic partitioning. So instead we decided to parallelize
+the decision tree training algorithm within a single tree node, specifically for
+the two expensive areas as mentioned previously:
 
 1. Initial building of histograms.
-2. Constructing child histograms from each node.
+2. Splitting parent histograms into child histograms.
 
 We used OpenMP to parallelize these two areas across features. Since building
 histograms and constructing child histograms requires scanning over
 the distributions of every histogram bin of every feature, this leads to a
-roughly balanced workload. The speedup graphs are shown below (experiments on
-GHC).
+roughly balanced workload. The graph below shows the training times of this
+parallel algorithm run on different numbers of threads. Experiments were
+performed on GHC and the Microsft Learn to Rank dataset.
 
-#### Result
+##### Result
 
 ![OpenMP](assets/runtime-openmp.png)
 
-
-The speedup graph above at first displays near-linear speedup, especially for
-histogram construction across different features. The eventual
+The graph above at first displays near-linear speedup, especially for
+histogram construction across different features. We suspect that the eventual
 dissipation of speedup is very likely due to memory bandwidth issues, since
 histogram construction is trivially parallelizable across features and needs
-minimal syncrhonization. We aim to solve this
-problem through using the GPU and hybrid parallelism mentioned later.
+minimal synchronization. To solve this problem, we decided to utilize more
+resources available to use here at CMU, specifically via distributed training and
+GPU/hybrid training.
 
 ### Distributing Training with Multiple Machines
+
+#### Approach
 
 A major concern we had initially, communication efficiency of distributed
 training, is somewhat alleviated by our histogram representation of the dataset.
@@ -291,35 +307,61 @@ This allows multiple machines to communicate with histograms instead of
 their partition of the dataset, drastically reducing the communication
 requirements.
 
-Our distributed training algorithm is basically to assign each machine on latedays
-to have a partition of the dataset, and construct local histograms. By
-doing this in a data parallel fashion, we should gain great speedups for
-histogram construction and hopefully good performance gains as well
-in the tree building phase (where communication and synchronization costs might dominate).
-Whenever we decide how to split a tree node, the workers send their histograms to the
-master, which merges them together to search for a split point. The master
-then sends the split point to the workers, and each worker
-builds local child histograms individually.
-Initial results, however, show that communication efficiency
-is still a problem. The experiment below was run on the latedays cluster on a
-varying number of workers/machines.
+Our first distributed algorithm roughly works as follows:
 
+1. Each machine in the cluster is assigned a partition of the dataset. One machine is
+   designated as the master which will be responsible for evaluating split
+   points.
+
+2. Each machine initially constructs local histograms of their partition and
+   assigns their local root node the histograms like before.
+
+3. While there are still nodes to be split, each worker sends their local
+   histograms for each feature for that node to master. Master
+   merges these histograms and evaluates possible split points like before.
+
+4. Master sends the best split point to the workers. Each machine in parallel
+   now splits the node into left and right childs. Repeat steps 3 and 4 as
+   needed.
+
+The parallelism that we gain from this algorithm is that each machine can
+construct and maintain histograms for their partition in parallel. Evaluating
+possible split points accurately, however, requires a global view of the
+feature distributions and as a result master needs all the histograms to make
+a decision. This could result in high communication overhead, since every
+node we split in the decision tree would require this information exchange.
+
+Our second distributed algorithm attempted to fix this problem by minimizing
+communication efficiency through an algorithm recently published in a [paper at
+NIPS](https://arxiv.org/abs/1611.01276). The idea is to maximize local
+computations on each worker before communicating with master. The algorithm is
+now roughly as follows (steps 1 and 2 same as before):
+
+3. While there are still nodes to be split, each worker first uses their local
+   histogram to evaluate possible split points.
+
+4. Each worker votes for their top k features, where k is a configurable
+   parameter.
+
+5. Master aggregates the votes and requests the top 2k most voted features.
+
+6. Workers send their local histograms for the top 2k features to master.
+   Master merges these histograms and evaluates possible split points like before.
+
+7. Master sends the best split point to the workers. Each machine in parallel
+   now splits the node into left and right childs. Repeat steps 3 to 7 as
+   needed.
+
+We implemented the above algorithms with Open MPI for communication
+between master and worker and OpenMP for parallelism within a machine
+like before.
+
+#### Result
+
+We evaluated the two algorithms on the Latedays cluster with a varying number of
+nodes.
 
 ![OpenMPI](assets/runtime-openmpi.png)
-
-
-As you can see from the graph, histogram construction scales well due to the
-trivial communication requirements necessary for it. On the other hand,
-communication during tree building is expensive, since the root
-machine must communicate with all other machines on every node split for every
-feature. To further reduce the amount of information each machine needs to send to
-the root, we implemented a voting scheme inspired by this
-[NIPS paper](https://arxiv.org/abs/1611.01276) where each local node sends top k histogram
-feature id's to the master and the master performs vote aggregation to determine
-the best feature to split on. This way, we reduce the amount of communication to
-almost constant since only indices are exchanged when determining the best split.
-We can see from the graph below that the performance no longer suffers from
-significant communication overhead in this new version.
 
 ![OpenMPI-v2](assets/runtime-openmpi2.png)
 

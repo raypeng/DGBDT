@@ -361,8 +361,8 @@ like before.
 #### Result
 
 We evaluated the two algorithms on the Latedays cluster with a varying number of
-nodes. We again used the Microsoft Learn to Rank dataset (2 million samples, 136
-features) to evaluate training time.
+nodes, with k = 5 for our distributed voting algorithm. We again used the Microsoft Learn
+to Rank dataset (2 million samples, 136 features) to evaluate training time.
 
 ![OpenMPI](assets/runtime-openmpi.png)
 
@@ -382,6 +382,20 @@ tree building time drastically, leading to good scaling beyond just 2 nodes.
 When run on 4 nodes, training finishes in 4.66 seconds, which is about
 a 4x speedup over running on 1 node (all nodes are also running
 OpenMP code with 24 threads).
+
+Since there is no guarantee that the local information used to pick feature
+candidates for splitting actually included the globally best feature, the
+distributed voting scheme is an approximation. To make sure our implementation
+did not sacrifice accuracy for speed, we also measured the acuracy of our
+trained decision tree as we scaled the number of nodes.
+We also compared the accuracy of our distributed algorithm with a sequential
+scikit-learn implementation.
+
+![accuracy](assets/accuracy.png)
+
+As the number of nodes increases, accuracy hardly changes at all, which suggests
+that this approximation is robust (the theoretical soundness is also proved in
+the original [paper](https://arxiv.org/abs/1611.01276)).
 
 ### GPU and Hybrid Implementation
 
@@ -460,7 +474,7 @@ the increase in dataset size, supporting our hypothesis that a larger dataset
 would offset the CUDA memory setup overhead and allow a GPU/hybrid
 implementation to shine. Specifically, our hybrid implementation has a **24
 speedup** over our optimized squential for the HIGGs dataset, but only a **4.7x speedup**
-when training on Microsoft Learn to Rank.
+when training on the Microsoft Learning to Rank dataset.
 
 ## References
 
@@ -493,3 +507,5 @@ Microsoft Learning to Rank Dataset
 Decision Trees Module in scikit-learn
 
 [http://scikit-learn.org/stable/modules/tree.html](http://scikit-learn.org/stable/modules/tree.html)
+
+**Equal work was done by both project members.**

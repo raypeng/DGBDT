@@ -379,11 +379,11 @@ devise an optimal dynamic scheduling policy.
 
 ## References
 
-Picture sources:
+**Picture sources:**
 
 [https://upload.wikimedia.org/wikipedia/commons/f/f3/CART_tree_titanic_survivors.png](https://upload.wikimedia.org/wikipedia/commons/f/f3/CART_tree_titanic_survivors.png)
 
-Papers:
+**Papers:**
 
 Learning to Rank Using Classification and Gradient Boosting
 
@@ -393,7 +393,7 @@ A Communication-Efficient Parallel Algorithm for Decision Tree
 
 [https://arxiv.org/abs/1611.01276](https://arxiv.org/abs/1611.01276)
 
-Datasets:
+**Datasets:**
 
 HIGGS Classification Dataset
 
@@ -402,3 +402,9 @@ HIGGS Classification Dataset
 Microsoft Learning to Rank Dataset
 
 [https://www.microsoft.com/en-us/research/project/mslr/](https://www.microsoft.com/en-us/research/project/mslr/)
+
+**Libraries for Benchmarking:**
+
+Decision Trees Module in scikit-learn
+
+[http://scikit-learn.org/stable/modules/tree.html](http://scikit-learn.org/stable/modules/tree.html)

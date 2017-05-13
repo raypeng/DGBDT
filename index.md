@@ -379,8 +379,9 @@ parallelizing histogram construction and splitting.
 In the second graph, which shows training times for the second distributed
 algorithm, we can see that the voting scheme reduces communication and
 tree building time drastically, leading to good scaling beyond just 2 nodes.
-When running on 4 nodes, training finishes in 4.66 seconds, which is about
-a 4x speedup over running on 1 node.
+When run on 4 nodes, training finishes in 4.66 seconds, which is about
+a 4x speedup over running on 1 node (all nodes are also running
+OpenMP code with 24 threads).
 
 ### GPU and Hybrid Implementation
 
@@ -394,17 +395,15 @@ statistics and assign each feature to one CUDA thread block in which all CUDA th
 within that thread block update histogram bin distributions by looping over
 all data points within the tree node in an interleaved fashion. To further reduce global
 memory writes we allocate a thread block local `__shared__` buffer to do local updates
-and push updates to global memory at the end of the kernel call. With this CUDA
-implementation we are able to get good performance by using CUDA SIMD operations to
-hide memory latency.
+and push updates to global memory at the end of the kernel call.
 
 As an extension of using only GPU to perform histogram updates and letting CPU stay idle,
-we move on to further improve performance by adopting a hybrid algorithm -- specifically
+we further improve performance by adopting a hybrid algorithm -- specifically
 we assign different features to CPU and GPU to perform histogram updates (see pseudocode below).
 The workload nature of histogram updating is easily dividable to CPU and GPU in that updates to different
 features will be written to different locations without any data races. The key advantage of
 hybrid scheduling work to CPU and GPU is that we can perform asynchronous CUDA kernel
-calls and utilize both heterogenous hardware to do work in parallel.
+calls and utilize both types of compute hardware to do work in parallel.
 
 <pre>
 gpu_features, cpu_features = assign_features(features)
@@ -414,7 +413,7 @@ cpu_result = []
 // Asynchronously compute on gpu
 kernel_gpu_compute_histograms(gpu_features, gpu_result)
 
-cpu_compute_histograms(cpu_features, cpu_result)
+cpu_compute_child_histograms(cpu_features, cpu_result)
 
 cudaThreadSynchronize()
 
@@ -425,32 +424,43 @@ merge_results(gpu_result, cpu_result)
 
 Since the speedup graph for CPU suggests that our algorithm may be bandwidth
 bound, an implementation that uses both the memory bandwidth of GPU and CPU will
-likely be faster. We found hybrid reduces tree building time by 10%
-over GPU only by statically assigning 8 features to threads on CPU and the rest
-on GPU on the [HIGGS Data Set](https://archive.ics.uci.edu/ml/datasets/HIGGS),
-which has 11 million samples. Both the GPU only and hybrid only implemetation
-are improvements over a multi-core CPU implementation with 16 threads.
-
-We have also experimented with a dynamic work scheduling policies in which we choose
+likely be faster. When run on the Microsoft Learn to Rank dataset on GHC,
+we found that hybrid reduces tree building time by 10%
+over GPU only by using a dynamic work scheduling policy in which we choose
 GPU/CPU hybrid for nodes with more samples and CPU-only for nodes with fewer samples
 (much like choosing between top-down and bottom-up in hybrid BFS in assignment 3).
 This dynamic scheduling tries to minimize data transfer between GPU and CPU in cases
-where the doing work on GPU is not worth the data transfer overhead.
-
+where doing work on GPU is not worth the data transfer overhead.
 
 ![scheduling](assets/runtime-scheduling.png)
 
-
 With this scheme, the dynamic hybrid version out performs GPU-only and CPU-only version
-by a noticable margin by utilizing heterogenous computing resources. It is interesting
-CPU-only and GPU-only land on the same runtime. After profiling, we find the initial cuda
-memory setup time takes up 25% of total tree construction time, which makes the overall
-runtime same as CPU-only despite the relatively fast CUDA kernel call. This indicates
-that to find a good hybrid scheduling strategy, we need to carefully profile the code
-and placing the work optimally on GPU and CPU depending on specific workload conditions.
-If we had more time for the project, we would perform a more comprehensive profiling and
-devise an optimal dynamic scheduling policy.
+by a decent margin by utilizing heterogenous computing resources. It is interesting that
+CPU-only and GPU-only land on the same runtime. After profiling, we found that the initial
+CUDA memory setup time (cudaMalloc, initial cudaMemcpy's) takes up 25% of total tree construction
+time, which makes the overall runtime of gpu same as CPU-only despite the relatively fast
+CUDA kernel calls used to compute child histograms. This indicates that to find a good
+hybrid scheduling strategy, we need to carefully profile the code and place the work
+optimally on GPU and CPU depending on specific workload conditions. If we had more time for the project,
+we would perform a more comprehensive profiling and devise an optimal dynamic scheduling policy.
 
+Although we didn't have time to devise a better dynamic scheduling policy, we
+did some initial testing of hybrid on a larger dataset. Since we suspected that they
+overhead of CUDA memory setup time was limiting the advantages of hybrid/GPU,
+we tried running our hybrid algorithm on the
+[HIGGS](https://archive.ics.uci.edu/ml/datasets/HIGGS) dataset, which contains
+11,000,000 samples. We ran our hybrid algorithm against sequential versions of
+the algorithm and compared its speedup when run on the Microsoft
+Learning to Rank dataset (about 2,000,000 samples).
+
+[!higgs](assets/different-datasets.png)
+
+Based on our intial profiling, the HIGGS dataset benefits signficantly more from
+the increase in dataset size, supporting our hypothesis that a larger dataset
+would offset the CUDA memory setup overhead and allow a GPU/hybrid
+implementation to shine. Specifically, our hybrid implementation has a **60x
+speedup** over our optimized squential for the HIGGs dataset, but only a **24x speedup** when
+compared to optimized sequential on Microsoft Learn to Rank.
 
 ## References
 

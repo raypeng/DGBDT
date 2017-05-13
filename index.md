@@ -280,32 +280,34 @@ the two expensive areas as mentioned previously:
 
 We used OpenMP to parallelize these two areas across features. Since building
 histograms and constructing child histograms requires scanning over
-the distributions of every histogram bin of every feature, this leads to a
-roughly balanced workload. The graph below shows the training times of this
-parallel algorithm run on different numbers of threads. Experiments were
-performed on GHC and the Microsft Learn to Rank dataset.
+the distributions of every histogram bin of every feature, this should
+lead to a roughly balanced workload.
 
 ##### Result
+
+The graph below shows the training times of the parallel algorithm run on
+different numbers of threads. Experiments were performed on GHC and the
+Microsft Learn to Rank dataset.
 
 ![OpenMP](assets/runtime-openmp.png)
 
 The graph above at first displays near-linear speedup, especially for
 histogram construction across different features. We suspect that the eventual
-dissipation of speedup is very likely due to memory bandwidth issues, since
-histogram construction is trivially parallelizable across features and needs
-minimal synchronization. To solve this problem, we decided to utilize more
-resources available to use here at CMU, specifically via distributed training and
-GPU/hybrid training.
+dissipation of speedup is very likely due to maxing out on memory bandwidth,
+since parallelizing histogram construction across features needs
+minimal synchronization but requires accessing a lot of memory.
+To solve this problem, we decided to utilize more resources available to us here at CMU,
+such as distributed cluster machines on Latedays and GPUs on GHC machines.
 
 ### Distributing Training with Multiple Machines
 
 #### Approach
 
-A major concern we had initially, communication efficiency of distributed
-training, is somewhat alleviated by our histogram representation of the dataset.
-This allows multiple machines to communicate with histograms instead of
-their partition of the dataset, drastically reducing the communication
-requirements.
+The communication efficiency of distributed
+training, was a major concern we had initially, but it is somewhat alleviated by
+our histogram representation of the dataset. This allows multiple machines to
+communicate with histogram statistics instead of their the dataset statistics,
+drastically reducing the communication requirements.
 
 Our first distributed algorithm roughly works as follows:
 
@@ -338,7 +340,7 @@ computations on each worker before communicating with master. The algorithm is
 now roughly as follows (steps 1 and 2 same as before):
 
 3. While there are still nodes to be split, each worker first uses their local
-   histogram to evaluate possible split points.
+   histograms to evaluate possible split points.
 
 4. Each worker votes for their top k features, where k is a configurable
    parameter.
@@ -359,11 +361,26 @@ like before.
 #### Result
 
 We evaluated the two algorithms on the Latedays cluster with a varying number of
-nodes.
+nodes. We again used the Microsoft Learn to Rank dataset (2 million samples, 136
+features) to evaluate training time.
 
 ![OpenMPI](assets/runtime-openmpi.png)
 
 ![OpenMPI-v2](assets/runtime-openmpi2.png)
+
+In the first graph, which shows training times for the first distributed
+algorithm,  we can see that distributing training to 2 nodes gives us good speedup.
+Communication time, however, starts to dominate after 2 nodes to such a degree that total
+training time actually starts to increase. The time to
+actually construct the tree goes up as well, since with more nodes there
+are more split points to consider, outweighing the advantages we get from
+parallelizing histogram construction and splitting.
+
+In the second graph, which shows training times for the second distributed
+algorithm, we can see that the voting scheme reduces communication and
+tree building time drastically, leading to good scaling beyond just 2 nodes.
+When running on 4 nodes, training finishes in 4.66 seconds, which is about
+a 4x speedup over running on 1 node.
 
 ### GPU and Hybrid Implementation
 

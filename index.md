@@ -457,7 +457,7 @@ by a decent margin by utilizing heterogeneous computing resources. It is interes
 CPU-only and GPU-only have the same runtime. After profiling, we found that the initial
 CUDA memory setup time (cudaMalloc, initial cudaMemcpy's) takes up 25%
 of total tree construction time,
-which makes the overall runtime of the GPU-only the same as CPU-only despite the
+which makes the overall runtime of GPU-only the same as CPU-only despite the
 relatively fast CUDA kernel calls used to compute child histograms. This indicates
 that to find a good hybrid scheduling strategy, we need to carefully profile the code and place the work
 optimally on GPU and CPU depending on specific workload conditions. If we had more time for the project,

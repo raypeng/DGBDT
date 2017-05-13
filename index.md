@@ -458,9 +458,9 @@ Learning to Rank dataset (about 2,000,000 samples).
 Based on our intial profiling, the HIGGS dataset benefits signficantly more from
 the increase in dataset size, supporting our hypothesis that a larger dataset
 would offset the CUDA memory setup overhead and allow a GPU/hybrid
-implementation to shine. Specifically, our hybrid implementation has a **60x
-speedup** over our optimized squential for the HIGGs dataset, but only a **24x speedup** when
-compared to optimized sequential on Microsoft Learn to Rank.
+implementation to shine. Specifically, our hybrid implementation has a **24
+speedup** over our optimized squential for the HIGGs dataset, but only a **4.7x speedup**
+when training on Microsoft Learn to Rank.
 
 ## References
 
